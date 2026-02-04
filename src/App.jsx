@@ -7,7 +7,6 @@ import {
   Navigate,
   useNavigate,
   useParams,
-  useLocation,
 } from 'react-router-dom'
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
@@ -159,7 +158,7 @@ function SortableProjectCard({ project, onEdit, onDelete, isDragging: externalIs
     transition,
     isDragging: isSortableDragging,
     isOver,
-  } = useSortable({ 
+  } = useSortable({
     id: project.id,
   })
 
@@ -170,8 +169,8 @@ function SortableProjectCard({ project, onEdit, onDelete, isDragging: externalIs
   }
 
   return (
-    <div 
-      ref={setNodeRef} 
+    <div
+      ref={setNodeRef}
       style={style}
       className={`sortable-item ${isSortableDragging ? 'sortable-item-dragging' : ''} ${isOver ? 'sortable-item-over' : ''}`}
     >
@@ -183,6 +182,138 @@ function SortableProjectCard({ project, onEdit, onDelete, isDragging: externalIs
         isDragging={isSortableDragging}
       />
     </div>
+  )
+}
+
+function SortableTableRow({ project, onEdit, onDelete }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: project.id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <tr ref={setNodeRef} style={style}>
+      <td>
+        <div
+          {...attributes}
+          {...listeners}
+          style={{
+            cursor: 'grab',
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '0.2rem 0.4rem',
+            marginRight: '0.5rem',
+            color: '#94a3b8',
+            borderRadius: '0.3rem',
+            transition: 'background 0.15s ease, color 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)'
+            e.currentTarget.style.color = '#4f46e5'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = '#94a3b8'
+          }}
+          title="Drag to reorder"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 20 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <circle cx="5" cy="5" r="1.5" fill="currentColor" />
+            <circle cx="10" cy="5" r="1.5" fill="currentColor" />
+            <circle cx="15" cy="5" r="1.5" fill="currentColor" />
+            <circle cx="5" cy="10" r="1.5" fill="currentColor" />
+            <circle cx="10" cy="10" r="1.5" fill="currentColor" />
+            <circle cx="15" cy="10" r="1.5" fill="currentColor" />
+            <circle cx="5" cy="15" r="1.5" fill="currentColor" />
+            <circle cx="10" cy="15" r="1.5" fill="currentColor" />
+            <circle cx="15" cy="15" r="1.5" fill="currentColor" />
+          </svg>
+        </div>
+        <Link to={`/projects/${project.id}`}>{project.name}</Link>
+      </td>
+      <td>{project.client}</td>
+      <td>{STATUS_LABELS[project.status]}</td>
+      <td>{PRIORITY_LABELS[project.priority]}</td>
+      <td>{project.development?.targetReleaseDate || '—'}</td>
+      <td>
+        <RiskChip risk={project.derived.overallRisk} size="md" />
+      </td>
+      <td className="manage-actions">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={() => onEdit(project)}
+          aria-label="Edit project"
+          title="Edit project"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="icon-button icon-button-danger"
+          onClick={() => onDelete(project)}
+          aria-label="Delete project"
+          title="Delete project"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M6.667 7.333v4M9.333 7.333v4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      </td>
+    </tr>
   )
 }
 
@@ -695,16 +826,83 @@ function TimelineView({ projects }) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  // Calculate statistics
+  const stats = {
+    total: projects.length,
+    inDiscovery: projects.filter(p => p.status === 'discovery').length,
+    inDevelopment: projects.filter(p => p.status === 'development').length,
+    completed: projects.filter(p => p.status === 'completed').length,
+    atRisk: projects.filter(p => computeProjectDerived(p).overallRisk === 'at-risk').length,
+    watch: projects.filter(p => computeProjectDerived(p).overallRisk === 'watch').length
+  }
+
   return (
     <div>
       <header className="app-header">
         <div>
           <h1>Project Timeline</h1>
           <p className="subtitle">
-            Visual timeline of all projects showing discovery, development, and release milestones
+            Visual timeline of {stats.total} project{stats.total !== 1 ? 's' : ''} showing discovery, development, and release milestones
           </p>
         </div>
       </header>
+
+      <div className="timeline-stats">
+        <div className="timeline-stat-card">
+          <div className="timeline-stat-value">{stats.total}</div>
+          <div className="timeline-stat-label">Total Projects</div>
+        </div>
+        <div className="timeline-stat-card">
+          <div className="timeline-stat-value">{stats.inDiscovery}</div>
+          <div className="timeline-stat-label">In Discovery</div>
+        </div>
+        <div className="timeline-stat-card">
+          <div className="timeline-stat-value">{stats.inDevelopment}</div>
+          <div className="timeline-stat-label">In Development</div>
+        </div>
+        <div className="timeline-stat-card">
+          <div className="timeline-stat-value">{stats.completed}</div>
+          <div className="timeline-stat-label">Completed</div>
+        </div>
+        <div className="timeline-stat-card timeline-stat-card-warning">
+          <div className="timeline-stat-value">{stats.atRisk}</div>
+          <div className="timeline-stat-label">At Risk</div>
+        </div>
+        <div className="timeline-stat-card timeline-stat-card-watch">
+          <div className="timeline-stat-value">{stats.watch}</div>
+          <div className="timeline-stat-label">Watch</div>
+        </div>
+      </div>
+
+      <div className="timeline-legend">
+        <h3 className="timeline-legend-title">Milestone Legend</h3>
+        <div className="timeline-legend-items">
+          <div className="timeline-legend-item">
+            <div className="timeline-legend-dot timeline-legend-dot-discovery"></div>
+            <span>Discovery Target</span>
+          </div>
+          <div className="timeline-legend-item">
+            <div className="timeline-legend-dot timeline-legend-dot-discovery-complete"></div>
+            <span>Discovery Complete</span>
+          </div>
+          <div className="timeline-legend-item">
+            <div className="timeline-legend-dot timeline-legend-dot-dev-start"></div>
+            <span>Dev Start</span>
+          </div>
+          <div className="timeline-legend-item">
+            <div className="timeline-legend-dot timeline-legend-dot-dev-target"></div>
+            <span>Release Target</span>
+          </div>
+          <div className="timeline-legend-item">
+            <div className="timeline-legend-dot timeline-legend-dot-dev-complete"></div>
+            <span>Released</span>
+          </div>
+          <div className="timeline-legend-item">
+            <div className="timeline-legend-line"></div>
+            <span>Today</span>
+          </div>
+        </div>
+      </div>
 
       <div className="timeline-container">
         <div className="timeline-header">
@@ -735,9 +933,11 @@ function TimelineView({ projects }) {
                   <Link to={`/projects/${project.id}`} className="timeline-project-link">
                     {project.name}
                   </Link>
+                  <div className="timeline-row-client">{project.client}</div>
                   <div className="timeline-row-meta">
                     <StatusPill status={project.status} />
                     <RiskChip risk={derived.overallRisk} size="sm" />
+                    <span className="timeline-priority-badge">{PRIORITY_LABELS[project.priority]}</span>
                   </div>
                 </div>
                 <div className="timeline-row-track">
@@ -816,7 +1016,7 @@ function TimelineView({ projects }) {
   )
 }
 
-function ProjectDetails({ projects }) {
+function ProjectDetails({ projects, onEdit, onDelete }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const project = projects.find((p) => p.id === id)
@@ -824,10 +1024,12 @@ function ProjectDetails({ projects }) {
   if (!project) {
     return (
       <div className="details-shell">
-        <button type="button" className="ghost-button" onClick={() => navigate(-1)}>
-          ← Back
-        </button>
-        <p className="muted" style={{ marginTop: '1rem' }}>
+        <div className="details-nav">
+          <button type="button" className="ghost-button ghost-small" onClick={() => navigate(-1)}>
+            ← Back
+          </button>
+        </div>
+        <p className="muted details-empty-state">
           Project not found.
         </p>
       </div>
@@ -838,20 +1040,77 @@ function ProjectDetails({ projects }) {
 
   return (
     <div className="details-shell">
-      <button type="button" className="ghost-button" onClick={() => navigate(-1)}>
-        ← Back to overview
-      </button>
+      <div className="details-nav">
+        <button type="button" className="ghost-button ghost-small" onClick={() => navigate(-1)}>
+          ← Back
+        </button>
+      </div>
+
       <header className="details-header">
-        <div>
+        <div className="details-header-left">
           <h1>{project.name}</h1>
-          <p className="subtitle">
-            {project.client} · {STATUS_LABELS[project.status]} ·{' '}
-            {PRIORITY_LABELS[project.priority]} priority
-          </p>
+          <div className="details-meta">
+            <span className="details-meta-item">{project.client}</span>
+            <StatusPill status={project.status} />
+            <RiskChip risk={derived.overallRisk} />
+            <span className="details-meta-badge">{PRIORITY_LABELS[project.priority]} priority</span>
+          </div>
         </div>
         <div className="details-header-right">
-          <StatusPill status={project.status} />
-          <RiskChip risk={derived.overallRisk} />
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => onEdit(project)}
+            aria-label="Edit project"
+            title="Edit project"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="icon-button icon-button-danger"
+            onClick={() => onDelete(project)}
+            aria-label="Delete project"
+            title="Delete project"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M6.667 7.333v4M9.333 7.333v4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -920,8 +1179,8 @@ function ProjectDetails({ projects }) {
             <p className="muted">No tracked artifacts for discovery.</p>
           )}
           {project.discovery.notes && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <h4 style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 0.3rem' }}>
+            <div className="details-subsection">
+              <h4 className="details-subsection-title">
                 Discovery notes
               </h4>
               <div
@@ -1334,8 +1593,6 @@ function App() {
   const [editingProject, setEditingProject] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const fileInputRef = useRef(null)
-  const navigate = useNavigate()
-  const location = useLocation()
 
   // Drag and drop sensors with improved settings
   const sensors = useSensors(
@@ -1488,7 +1745,7 @@ function App() {
 
   // Get the active project for drag overlay
   const activeProject = activeId
-    ? filteredOrdered.find((p) => p.id === activeId)
+    ? orderedProjectsWithDerived.find((p) => p.id === activeId)
     : null
 
   function handleExport() {
@@ -1545,6 +1802,11 @@ function App() {
     setEditorOpen(true)
   }
 
+  function handleAddNew() {
+    setEditingProject(null)
+    setEditorOpen(true)
+  }
+
   function handleDelete(project) {
     if (!window.confirm(`Delete project "${project.name}"? This action cannot be undone.`)) {
       return
@@ -1569,10 +1831,6 @@ function App() {
       }
       setEditorOpen(false)
       setEditingProject(null)
-      // If we're on the dedicated "Add new project" page, navigate back to the projects list
-      if (location.pathname === '/projects/new') {
-        navigate('/projects')
-      }
     } catch (error) {
       console.error('Save failed:', error)
       alert(`Failed to save project: ${error.message}`)
@@ -1649,14 +1907,6 @@ function App() {
               }
             >
               Project list
-            </NavLink>
-            <NavLink
-              to="/projects/new"
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
-              }
-            >
-              Add new project
             </NavLink>
 
             <div className="sidebar-section-label">Admin</div>
@@ -1758,23 +2008,47 @@ function App() {
                       </p>
                     </div>
                   </header>
-                  <section className="projects-grid">
-                    {projectsWithDerived.filter((p) => p.status === 'discovery').length ===
-                    0 ? (
-                      <p className="muted">No projects in discovery.</p>
-                    ) : (
-                      projectsWithDerived
-                        .filter((p) => p.status === 'discovery')
-                        .map((project) => (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={orderedProjectsWithDerived.filter((p) => p.status === 'discovery').map((p) => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <section className="projects-grid">
+                        {orderedProjectsWithDerived.filter((p) => p.status === 'discovery').length ===
+                        0 ? (
+                          <p className="muted">No projects in discovery.</p>
+                        ) : (
+                          orderedProjectsWithDerived
+                            .filter((p) => p.status === 'discovery')
+                            .map((project) => (
+                              <SortableProjectCard
+                                key={project.id}
+                                project={project}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                              />
+                            ))
+                        )}
+                      </section>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeProject ? (
+                        <div className="drag-overlay-card">
                           <ProjectCard
-                            key={project.id}
-                            project={project}
+                            project={activeProject}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
                           />
-                        ))
-                    )}
-                  </section>
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 </>
               }
             />
@@ -1790,23 +2064,47 @@ function App() {
                       </p>
                     </div>
                   </header>
-                  <section className="projects-grid">
-                    {projectsWithDerived.filter((p) => p.status === 'development').length ===
-                    0 ? (
-                      <p className="muted">No projects in development.</p>
-                    ) : (
-                      projectsWithDerived
-                        .filter((p) => p.status === 'development')
-                        .map((project) => (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={orderedProjectsWithDerived.filter((p) => p.status === 'development').map((p) => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <section className="projects-grid">
+                        {orderedProjectsWithDerived.filter((p) => p.status === 'development').length ===
+                        0 ? (
+                          <p className="muted">No projects in development.</p>
+                        ) : (
+                          orderedProjectsWithDerived
+                            .filter((p) => p.status === 'development')
+                            .map((project) => (
+                              <SortableProjectCard
+                                key={project.id}
+                                project={project}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                              />
+                            ))
+                        )}
+                      </section>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeProject ? (
+                        <div className="drag-overlay-card">
                           <ProjectCard
-                            key={project.id}
-                            project={project}
+                            project={activeProject}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
                           />
-                        ))
-                    )}
-                  </section>
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 </>
               }
             />
@@ -1822,23 +2120,47 @@ function App() {
                       </p>
                     </div>
                   </header>
-                  <section className="projects-grid">
-                    {projectsWithDerived.filter((p) => p.status === 'on_hold').length ===
-                    0 ? (
-                      <p className="muted">No projects currently on hold.</p>
-                    ) : (
-                      projectsWithDerived
-                        .filter((p) => p.status === 'on_hold')
-                        .map((project) => (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={orderedProjectsWithDerived.filter((p) => p.status === 'on_hold').map((p) => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <section className="projects-grid">
+                        {orderedProjectsWithDerived.filter((p) => p.status === 'on_hold').length ===
+                        0 ? (
+                          <p className="muted">No projects currently on hold.</p>
+                        ) : (
+                          orderedProjectsWithDerived
+                            .filter((p) => p.status === 'on_hold')
+                            .map((project) => (
+                              <SortableProjectCard
+                                key={project.id}
+                                project={project}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                              />
+                            ))
+                        )}
+                      </section>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeProject ? (
+                        <div className="drag-overlay-card">
                           <ProjectCard
-                            key={project.id}
-                            project={project}
+                            project={activeProject}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
                           />
-                        ))
-                    )}
-                  </section>
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 </>
               }
             />
@@ -1854,23 +2176,47 @@ function App() {
                       </p>
                     </div>
                   </header>
-                  <section className="projects-grid">
-                    {projectsWithDerived.filter((p) => p.status === 'completed').length ===
-                    0 ? (
-                      <p className="muted">No completed projects yet.</p>
-                    ) : (
-                      projectsWithDerived
-                        .filter((p) => p.status === 'completed')
-                        .map((project) => (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={orderedProjectsWithDerived.filter((p) => p.status === 'completed').map((p) => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <section className="projects-grid">
+                        {orderedProjectsWithDerived.filter((p) => p.status === 'completed').length ===
+                        0 ? (
+                          <p className="muted">No completed projects yet.</p>
+                        ) : (
+                          orderedProjectsWithDerived
+                            .filter((p) => p.status === 'completed')
+                            .map((project) => (
+                              <SortableProjectCard
+                                key={project.id}
+                                project={project}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                              />
+                            ))
+                        )}
+                      </section>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeProject ? (
+                        <div className="drag-overlay-card">
                           <ProjectCard
-                            key={project.id}
-                            project={project}
+                            project={activeProject}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
                           />
-                        ))
-                    )}
-                  </section>
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 </>
               }
             />
@@ -1889,135 +2235,63 @@ function App() {
                         Structured list for quick edits, clean-up, and navigation to details.
                       </p>
                     </div>
-                    <Link to="/projects/new" className="primary-button primary-small">
+                    <button
+                      onClick={handleAddNew}
+                      className="primary-button primary-small"
+                    >
                       + Add project
-                    </Link>
+                    </button>
                   </header>
 
-                  <div className="manage-table-wrapper">
-                    <table className="manage-table">
-                      <thead>
-                        <tr>
-                          <th>Project</th>
-                          <th>Client</th>
-                          <th>Status</th>
-                          <th>Priority</th>
-                          <th>Dev target</th>
-                          <th>Risk</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {projectsWithDerived.map((p) => (
-                          <tr key={p.id}>
-                            <td>
-                              <Link to={`/projects/${p.id}`}>{p.name}</Link>
-                            </td>
-                            <td>{p.client}</td>
-                            <td>{STATUS_LABELS[p.status]}</td>
-                            <td>{PRIORITY_LABELS[p.priority]}</td>
-                            <td>{p.development?.targetReleaseDate || '—'}</td>
-                            <td>
-                              <RiskChip risk={p.derived.overallRisk} size="md" />
-                            </td>
-                            <td className="manage-actions">
-                              <button
-                                type="button"
-                                className="icon-button"
-                                onClick={() => handleEdit(p)}
-                                aria-label="Edit project"
-                                title="Edit project"
-                              >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  aria-hidden="true"
-                                >
-                                  <path
-                                    d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                className="icon-button icon-button-danger"
-                                onClick={() => handleDelete(p)}
-                                aria-label="Delete project"
-                                title="Delete project"
-                              >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  aria-hidden="true"
-                                >
-                                  <path
-                                    d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                  <path
-                                    d="M6.667 7.333v4M9.333 7.333v4"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                  />
-                                </svg>
-                              </button>
-                            </td>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <div className="manage-table-wrapper">
+                      <table className="manage-table">
+                        <thead>
+                          <tr>
+                            <th>Project</th>
+                            <th>Client</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Dev target</th>
+                            <th>Risk</th>
+                            <th />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {projectsWithDerived.length === 0 && (
+                        </thead>
+                        <SortableContext
+                          items={orderedProjectsWithDerived.map((p) => p.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <tbody>
+                            {orderedProjectsWithDerived.map((p) => (
+                              <SortableTableRow
+                                key={p.id}
+                                project={p}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                              />
+                            ))}
+                          </tbody>
+                        </SortableContext>
+                      </table>
+                    </div>
+                    {orderedProjectsWithDerived.length === 0 && (
                       <p className="muted">
                         No projects yet — add your first project to get started.
                       </p>
                     )}
-                  </div>
-                </section>
-              }
-            />
-            <Route
-              path="/projects/new"
-              element={
-                <section className="create-view">
-                  <header className="app-header">
-                    <div>
-                      <h1>Add new project</h1>
-                      <p className="subtitle">
-                        Capture a new initiative, targets, and notes. You can refine details
-                        later.
-                      </p>
-                    </div>
-                  </header>
-
-                  <div className="create-panel">
-                    <ProjectEditor
-                      open
-                      initialProject={null}
-                      onSave={handleSave}
-                      onCancel={() => window.history.back()}
-                      onDelete={handleDelete}
-                    />
-                  </div>
+                  </DndContext>
                 </section>
               }
             />
             <Route
               path="/projects/:id"
-              element={<ProjectDetails projects={projects} />}
+              element={<ProjectDetails projects={projects} onEdit={handleEdit} onDelete={handleDelete} />}
             />
             <Route
               path="/settings"
