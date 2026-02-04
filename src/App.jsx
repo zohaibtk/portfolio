@@ -190,20 +190,17 @@ function ProjectCard({ project, onEdit, onDelete, dragHandleProps, isDragging })
   const derived = useMemo(() => computeProjectDerived(project), [project])
 
   return (
-    <article 
+    <article
       className={`project-card ${dragHandleProps ? 'project-card-draggable' : ''} ${isDragging ? 'project-card-is-dragging' : ''}`}
     >
       <header className="project-card__header">
-        <div>
+        <div className="project-card__title-row">
           <h2 className="project-card__title">
             <Link to={`/projects/${project.id}`}>{project.name}</Link>
           </h2>
-          <p className="project-card__client">{project.client}</p>
-        </div>
-        <div className="project-card__header-right">
           {dragHandleProps && (
             <div
-              className="drag-handle"
+              className="drag-handle drag-handle-corner"
               {...dragHandleProps}
               aria-label={`Drag to reorder ${project.name}`}
               role="button"
@@ -237,69 +234,76 @@ function ProjectCard({ project, onEdit, onDelete, dragHandleProps, isDragging })
               <span className="drag-handle-text">Drag</span>
             </div>
           )}
-          <StatusPill status={project.status} />
-          <RiskChip risk={derived.overallRisk} />
-          <div className="project-card__actions">
-            <button
-              type="button"
-              className="icon-button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onEdit(project)
-              }}
-              aria-label="Edit project"
-              title="Edit project"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
+        </div>
+        <p className="project-card__client">{project.client}</p>
+        <div className="project-card__meta-row">
+          <div className="project-card__meta-left">
+            <StatusPill status={project.status} />
+            <RiskChip risk={derived.overallRisk} />
+          </div>
+          <div className="project-card__meta-right">
+            <div className="project-card__actions">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit(project)
+                }}
+                aria-label="Edit project"
+                title="Edit project"
               >
-                <path
-                  d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="icon-button icon-button-danger"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(project)
-              }}
-              aria-label="Delete project"
-              title="Delete project"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="icon-button icon-button-danger"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(project)
+                }}
+                aria-label="Delete project"
+                title="Delete project"
               >
-                <path
-                  d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M6.667 7.333v4M9.333 7.333v4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M6.667 7.333v4M9.333 7.333v4"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </header>
