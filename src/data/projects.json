@@ -1,0 +1,84 @@
+[
+  {
+    "id": "p-001",
+    "name": "New Banking App",
+    "client": "ACME Bank",
+    "status": "discovery",
+    "priority": "high",
+    "discovery": {
+      "startDate": "2026-01-05",
+      "targetCompleteDate": "2026-01-20",
+      "actualCompleteDate": null,
+      "requiredArtifacts": [
+        {
+          "id": "a-001",
+          "name": "Business Requirements Document",
+          "owner": "Client",
+          "dueDate": "2026-01-10",
+          "receivedDate": null
+        },
+        {
+          "id": "a-002",
+          "name": "Current API Specs",
+          "owner": "Client",
+          "dueDate": "2026-01-12",
+          "receivedDate": "2026-01-13"
+        }
+      ]
+    },
+    "development": {
+      "startDate": null,
+      "targetReleaseDate": "2026-03-01",
+      "actualReleaseDate": null
+    },
+    "notes": "Waiting for BRD to finalize discovery scope."
+  },
+  {
+    "id": "p-002",
+    "name": "Internal CRM Upgrade",
+    "client": "Internal",
+    "status": "development",
+    "priority": "medium",
+    "discovery": {
+      "startDate": "2025-11-01",
+      "targetCompleteDate": "2025-11-15",
+      "actualCompleteDate": "2025-11-18",
+      "requiredArtifacts": []
+    },
+    "development": {
+      "startDate": "2025-11-20",
+      "targetReleaseDate": "2026-02-01",
+      "actualReleaseDate": null
+    },
+    "notes": "Scope locked, focusing on integration testing."
+  },
+  {
+    "id": "p-003",
+    "name": "E‑commerce Revamp",
+    "client": "RetailCo",
+    "status": "on_hold",
+    "priority": "low",
+    "onHoldReason": "Client priority shift to another initiative.",
+    "discovery": {
+      "startDate": "2025-12-01",
+      "targetCompleteDate": "2025-12-20",
+      "actualCompleteDate": null,
+      "requiredArtifacts": [
+        {
+          "id": "a-010",
+          "name": "Updated Product Catalog",
+          "owner": "Client",
+          "dueDate": "2025-12-10",
+          "receivedDate": null
+        }
+      ]
+    },
+    "development": {
+      "startDate": null,
+      "targetReleaseDate": "2026-04-15",
+      "actualReleaseDate": null
+    },
+    "notes": "Restart expected once client confirms Q3 budget."
+  }
+]
+
