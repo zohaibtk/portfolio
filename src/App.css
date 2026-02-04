@@ -371,6 +371,14 @@
   background: rgba(248, 250, 252, 0.7);
 }
 
+.artifact-editor-row input {
+  border-radius: 0.45rem;
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  padding: 0.18rem 0.3rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
 .risk-list {
   margin: 0;
   padding-left: 1.1rem;
@@ -631,6 +639,41 @@
 
 .notes-field textarea {
   resize: vertical;
+}
+
+.rte-quill .ql-toolbar.ql-snow,
+.rte-quill .ql-container.ql-snow {
+  border-color: rgba(148, 163, 184, 0.9);
+}
+
+.rte-quill .ql-toolbar.ql-snow {
+  border-top-left-radius: 0.55rem;
+  border-top-right-radius: 0.55rem;
+}
+
+.rte-quill .ql-container.ql-snow {
+  border-bottom-left-radius: 0.55rem;
+  border-bottom-right-radius: 0.55rem;
+  min-height: 92px;
+}
+
+.rte-quill .ql-editor {
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.rich-text {
+  font-size: 0.8rem;
+  color: #0f172a;
+}
+
+.rich-text ul {
+  padding-left: 1.1rem;
+  margin: 0.2rem 0;
+}
+
+.rich-text li + li {
+  margin-top: 0.12rem;
 }
 
 .editor-footer {

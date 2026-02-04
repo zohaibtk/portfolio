@@ -7,7 +7,10 @@ import {
   Navigate,
   useNavigate,
   useParams,
+  useLocation,
 } from 'react-router-dom'
+import ReactQuill from 'react-quill'
+import 'react-quill/dist/quill.snow.css'
 import './App.css'
 import dataService from './services/dataService'
 
@@ -85,6 +88,34 @@ function computeProjectDerived(project) {
       discoveryIsLate && discoveryTarget ? daysBetween(discoveryTarget, now) : null,
     devDaysLate: devIsLate && devTarget ? daysBetween(devTarget, now) : null,
   }
+}
+
+function RichTextEditor({ label, value, onChange, placeholder }) {
+  const modules = useMemo(
+    () => ({
+      toolbar: [
+        ['bold', 'italic', 'underline'],
+        [{ list: 'bullet' }, { list: 'ordered' }],
+        ['clean'],
+      ],
+    }),
+    [],
+  )
+
+  return (
+    <label className="notes-field">
+      <span>{label}</span>
+      <div className="rte-quill">
+        <ReactQuill
+          theme="snow"
+          value={value || ''}
+          onChange={onChange}
+          placeholder={placeholder}
+          modules={modules}
+        />
+      </div>
+    </label>
+  )
 }
 
 function RiskChip({ risk, size = 'md' }) {
@@ -217,9 +248,11 @@ function ProjectCard({ project, onEdit, onDelete }) {
               <h4 style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 0.3rem' }}>
                 Discovery notes
               </h4>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#0f172a' }}>
-                {project.discovery.notes}
-              </p>
+              <div
+                className="rich-text"
+                // eslint-disable-next-line react/no-danger
+                dangerouslySetInnerHTML={{ __html: project.discovery.notes }}
+              />
             </div>
           )}
         </section>
@@ -259,7 +292,11 @@ function ProjectCard({ project, onEdit, onDelete }) {
       {project.notes && (
         <section className="project-card__section">
           <h3 className="section-title">Notes</h3>
-          <p>{project.notes}</p>
+          <div
+            className="rich-text"
+            // eslint-disable-next-line react/no-danger
+            dangerouslySetInnerHTML={{ __html: project.notes }}
+          />
         </section>
       )}
     </article>
@@ -607,9 +644,11 @@ function ProjectDetails({ projects }) {
               <h4 style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 0.3rem' }}>
                 Discovery notes
               </h4>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#0f172a' }}>
-                {project.discovery.notes}
-              </p>
+              <div
+                className="rich-text"
+                // eslint-disable-next-line react/no-danger
+                dangerouslySetInnerHTML={{ __html: project.discovery.notes }}
+              />
             </div>
           )}
         </section>
@@ -629,7 +668,11 @@ function ProjectDetails({ projects }) {
       {project.notes && (
         <section className="details-section">
           <h3 className="section-title">Notes</h3>
-          <p>{project.notes}</p>
+          <div
+            className="rich-text"
+            // eslint-disable-next-line react/no-danger
+            dangerouslySetInnerHTML={{ __html: project.notes }}
+          />
         </section>
       )}
     </div>
@@ -649,6 +692,7 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
     discoveryActualCompleteDate:
       initialProject?.discovery?.actualCompleteDate ?? '',
     discoveryNotes: initialProject?.discovery?.notes ?? '',
+    discoveryRequiredArtifacts: initialProject?.discovery?.requiredArtifacts ?? [],
     devStartDate: initialProject?.development?.startDate ?? '',
     devTargetReleaseDate: initialProject?.development?.targetReleaseDate ?? '',
     devActualReleaseDate: initialProject?.development?.actualReleaseDate ?? '',
@@ -668,6 +712,7 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
       discoveryActualCompleteDate:
         initialProject?.discovery?.actualCompleteDate ?? '',
       discoveryNotes: initialProject?.discovery?.notes ?? '',
+    discoveryRequiredArtifacts: initialProject?.discovery?.requiredArtifacts ?? [],
       devStartDate: initialProject?.development?.startDate ?? '',
       devTargetReleaseDate: initialProject?.development?.targetReleaseDate ?? '',
       devActualReleaseDate: initialProject?.development?.actualReleaseDate ?? '',
@@ -683,6 +728,41 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
     setForm((prev) => ({ ...prev, [name]: value }))
   }
 
+  function handleArtifactChange(index, field, value) {
+    setForm((prev) => {
+      const artifacts = [...(prev.discoveryRequiredArtifacts || [])]
+      artifacts[index] = {
+        ...artifacts[index],
+        [field]: value,
+      }
+      return { ...prev, discoveryRequiredArtifacts: artifacts }
+    })
+  }
+
+  function handleAddArtifact() {
+    setForm((prev) => ({
+      ...prev,
+      discoveryRequiredArtifacts: [
+        ...(prev.discoveryRequiredArtifacts || []),
+        {
+          id: `a-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: '',
+          owner: '',
+          dueDate: '',
+          receivedDate: null,
+        },
+      ],
+    }))
+  }
+
+  function handleRemoveArtifact(index) {
+    setForm((prev) => {
+      const artifacts = [...(prev.discoveryRequiredArtifacts || [])]
+      artifacts.splice(index, 1)
+      return { ...prev, discoveryRequiredArtifacts: artifacts }
+    })
+  }
+
   function handleSubmit(e) {
     e.preventDefault()
     if (!form.name.trim()) return
@@ -693,12 +773,21 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
       status: form.status,
       priority: form.priority,
       onHoldReason: form.status === 'on_hold' ? form.onHoldReason.trim() : '',
-      notes: form.notes.trim(),
+      notes: form.notes?.trim?.() || form.notes || '',
       discovery: {
         ...(initialProject?.discovery || {}),
         targetCompleteDate: form.discoveryTargetCompleteDate || null,
         actualCompleteDate: form.discoveryActualCompleteDate || null,
-        notes: form.discoveryNotes.trim() || null,
+        notes: form.discoveryNotes?.trim?.() || form.discoveryNotes || null,
+        requiredArtifacts: (form.discoveryRequiredArtifacts || [])
+          .filter((a) => a.name?.trim())
+          .map((a) => ({
+            ...a,
+            name: a.name.trim(),
+            owner: a.owner?.trim() || '',
+            dueDate: a.dueDate || null,
+            receivedDate: a.receivedDate || null,
+          })),
       },
       development: {
         ...(initialProject?.development || {}),
@@ -787,16 +876,96 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
               />
             </label>
           </div>
-          <label className="notes-field">
-            <span>Discovery notes</span>
-            <textarea
-              name="discoveryNotes"
-              rows={3}
-              value={form.discoveryNotes}
-              onChange={handleChange}
-              placeholder="Add notes about discovery phase, requirements, findings, etc."
-            />
-          </label>
+          <RichTextEditor
+            label="Discovery notes"
+            value={form.discoveryNotes}
+            onChange={(html) => setForm((prev) => ({ ...prev, discoveryNotes: html }))}
+            placeholder="Add notes about discovery phase, requirements, findings, etc."
+          />
+          <div style={{ marginTop: '0.5rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.3rem',
+              }}
+            >
+              <span className="section-title">Discovery required artifacts</span>
+              <button
+                type="button"
+                className="ghost-button ghost-small"
+                onClick={handleAddArtifact}
+              >
+                + Add artifact
+              </button>
+            </div>
+            {form.discoveryRequiredArtifacts?.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {form.discoveryRequiredArtifacts.map((a, index) => (
+                  <div key={a.id} className="artifact-editor-row">
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.25rem' }}>
+                      <input
+                        value={a.name || ''}
+                        onChange={(e) =>
+                          handleArtifactChange(index, 'name', e.target.value)
+                        }
+                        placeholder="Artifact name (e.g. Requirements doc)"
+                        style={{ flex: 2 }}
+                      />
+                      <input
+                        value={a.owner || ''}
+                        onChange={(e) =>
+                          handleArtifactChange(index, 'owner', e.target.value)
+                        }
+                        placeholder="Owner (e.g. Client)"
+                        style={{ flex: 1 }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <span style={{ color: '#94a3b8' }}>Due date</span>
+                        <input
+                          type="date"
+                          value={a.dueDate || ''}
+                          onChange={(e) =>
+                            handleArtifactChange(index, 'dueDate', e.target.value)
+                          }
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <span style={{ color: '#94a3b8' }}>Received</span>
+                        <input
+                          type="date"
+                          value={a.receivedDate || ''}
+                          onChange={(e) =>
+                            handleArtifactChange(index, 'receivedDate', e.target.value)
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="link-button link-danger"
+                        onClick={() => handleRemoveArtifact(index)}
+                        style={{ marginLeft: 'auto' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">No required artifacts added for discovery.</p>
+            )}
+          </div>
           <div className="form-grid">
             <label>
               <span>Development start date</span>
@@ -835,15 +1004,12 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
               />
             </label>
           </div>
-          <label className="notes-field">
-            <span>Notes</span>
-            <textarea
-              name="notes"
-              rows={3}
-              value={form.notes}
-              onChange={handleChange}
-            />
-          </label>
+          <RichTextEditor
+            label="Notes"
+            value={form.notes}
+            onChange={(html) => setForm((prev) => ({ ...prev, notes: html }))}
+            placeholder="General project notes, decisions, blockers, context, etc."
+          />
 
           <footer className="editor-footer">
             <div className="editor-footer-left">
@@ -886,6 +1052,8 @@ function App() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(null)
   const fileInputRef = useRef(null)
+  const navigate = useNavigate()
+  const location = useLocation()
 
   // Initialize data service and load projects
   useEffect(() => {
@@ -1011,6 +1179,10 @@ function App() {
       }
       setEditorOpen(false)
       setEditingProject(null)
+      // If we're on the dedicated "Add new project" page, navigate back to the projects list
+      if (location.pathname === '/projects/new') {
+        navigate('/projects')
+      }
     } catch (error) {
       console.error('Save failed:', error)
       alert(`Failed to save project: ${error.message}`)
