@@ -1,6 +1,7 @@
 import projectsData from '../data/projects.json'
 
 const STORAGE_KEY = 'pm-projects'
+const ORDER_STORAGE_KEY = 'pm-projects-order'
 
 /**
  * Data service for managing projects with JSON file as source of truth
@@ -65,10 +66,78 @@ class DataService {
   }
 
   /**
-   * Get all projects
+   * Get custom project order from localStorage
    */
-  getAllProjects() {
-    return [...this.projects]
+  getProjectOrder() {
+    try {
+      const stored = localStorage.getItem(ORDER_STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) {
+          return parsed
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load project order:', error)
+    }
+    return null
+  }
+
+  /**
+   * Save custom project order to localStorage
+   */
+  saveProjectOrder(order) {
+    try {
+      localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(order))
+    } catch (error) {
+      console.error('Failed to save project order:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update project order
+   */
+  updateProjectOrder(newOrder) {
+    if (!Array.isArray(newOrder)) {
+      throw new Error('Order must be an array')
+    }
+    this.saveProjectOrder(newOrder)
+    this.notifyListeners()
+  }
+
+  /**
+   * Get all projects, optionally sorted by custom order
+   */
+  getAllProjects(useCustomOrder = false) {
+    const projects = [...this.projects]
+    
+    if (useCustomOrder) {
+      const order = this.getProjectOrder()
+      if (order && order.length > 0) {
+        // Create a map for quick lookup
+        const projectMap = new Map(projects.map(p => [p.id, p]))
+        
+        // Sort by custom order, then append any projects not in the order
+        const ordered = []
+        const unordered = []
+        
+        order.forEach(id => {
+          const project = projectMap.get(id)
+          if (project) {
+            ordered.push(project)
+            projectMap.delete(id)
+          }
+        })
+        
+        // Add any projects not in the custom order
+        projectMap.forEach(project => unordered.push(project))
+        
+        return [...ordered, ...unordered]
+      }
+    }
+    
+    return projects
   }
 
   /**
@@ -102,6 +171,14 @@ class DataService {
 
     this.projects.push(newProject)
     this.saveToStorage()
+    
+    // Add new project to the end of custom order if it exists
+    const order = this.getProjectOrder()
+    if (order) {
+      order.push(newProject.id)
+      this.saveProjectOrder(order)
+    }
+    
     this.notifyListeners()
     return newProject
   }
@@ -147,6 +224,17 @@ class DataService {
 
     const deleted = this.projects.splice(index, 1)[0]
     this.saveToStorage()
+    
+    // Remove from custom order if it exists
+    const order = this.getProjectOrder()
+    if (order) {
+      const orderIndex = order.indexOf(deleted.id)
+      if (orderIndex !== -1) {
+        order.splice(orderIndex, 1)
+        this.saveProjectOrder(order)
+      }
+    }
+    
     this.notifyListeners()
     return deleted
   }

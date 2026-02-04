@@ -11,6 +11,23 @@ import {
 } from 'react-router-dom'
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import './App.css'
 import dataService from './services/dataService'
 
@@ -18,6 +35,7 @@ const STATUS_LABELS = {
   discovery: 'In Discovery',
   development: 'In Development',
   on_hold: 'On Hold',
+  completed: 'Completed',
 }
 
 const PRIORITY_LABELS = {
@@ -132,11 +150,49 @@ function StatusPill({ status }) {
   return <span className={`status-pill status-${status}`}>{STATUS_LABELS[status]}</span>
 }
 
-function ProjectCard({ project, onEdit, onDelete }) {
+function SortableProjectCard({ project, onEdit, onDelete, isDragging: externalIsDragging }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+    isOver,
+  } = useSortable({ 
+    id: project.id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isSortableDragging ? 'none' : transition,
+    opacity: isSortableDragging ? 0.3 : isOver ? 0.8 : 1,
+  }
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className={`sortable-item ${isSortableDragging ? 'sortable-item-dragging' : ''} ${isOver ? 'sortable-item-over' : ''}`}
+    >
+      <ProjectCard
+        project={project}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        isDragging={isSortableDragging}
+      />
+    </div>
+  )
+}
+
+function ProjectCard({ project, onEdit, onDelete, dragHandleProps, isDragging }) {
   const derived = useMemo(() => computeProjectDerived(project), [project])
 
   return (
-    <article className="project-card">
+    <article 
+      className={`project-card ${dragHandleProps ? 'project-card-draggable' : ''} ${isDragging ? 'project-card-is-dragging' : ''}`}
+    >
       <header className="project-card__header">
         <div>
           <h2 className="project-card__title">
@@ -145,22 +201,104 @@ function ProjectCard({ project, onEdit, onDelete }) {
           <p className="project-card__client">{project.client}</p>
         </div>
         <div className="project-card__header-right">
+          {dragHandleProps && (
+            <div
+              className="drag-handle"
+              {...dragHandleProps}
+              aria-label={`Drag to reorder ${project.name}`}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  // Trigger drag start on keyboard activation
+                  dragHandleProps.onKeyDown?.(e)
+                }
+              }}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <circle cx="5" cy="5" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="5" r="1.5" fill="currentColor" />
+                <circle cx="15" cy="5" r="1.5" fill="currentColor" />
+                <circle cx="5" cy="10" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="10" r="1.5" fill="currentColor" />
+                <circle cx="15" cy="10" r="1.5" fill="currentColor" />
+                <circle cx="5" cy="15" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="15" r="1.5" fill="currentColor" />
+                <circle cx="15" cy="15" r="1.5" fill="currentColor" />
+              </svg>
+              <span className="drag-handle-text">Drag</span>
+            </div>
+          )}
           <StatusPill status={project.status} />
           <RiskChip risk={derived.overallRisk} />
           <div className="project-card__actions">
             <button
               type="button"
-              className="link-button"
-              onClick={() => onEdit(project)}
+              className="icon-button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit(project)
+              }}
+              aria-label="Edit project"
+              title="Edit project"
             >
-              Edit
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
             <button
               type="button"
-              className="link-button link-danger"
-              onClick={() => onDelete(project)}
+              className="icon-button icon-button-danger"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(project)
+              }}
+              aria-label="Delete project"
+              title="Delete project"
             >
-              Delete
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M6.667 7.333v4M9.333 7.333v4"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
             </button>
           </div>
         </div>
@@ -303,45 +441,183 @@ function ProjectCard({ project, onEdit, onDelete }) {
   )
 }
 
-function Filters({ filter, onChange }) {
+function Filters({ filter, onChange, projects, projectsWithDerived, filteredCount }) {
+  // Calculate counts for each filter option
+  const statusCounts = useMemo(() => {
+    const counts = { all: projects.length }
+    projects.forEach((p) => {
+      counts[p.status] = (counts[p.status] || 0) + 1
+    })
+    return counts
+  }, [projects])
+
+  const riskCounts = useMemo(() => {
+    const counts = { all: projectsWithDerived.length }
+    projectsWithDerived.forEach((p) => {
+      const risk = p.derived?.overallRisk || 'on-track'
+      counts[risk] = (counts[risk] || 0) + 1
+    })
+    return counts
+  }, [projectsWithDerived])
+
+  const hasActiveFilters = filter.status !== 'all' || filter.risk !== 'all'
+
+  const handleClearFilters = () => {
+    onChange({ status: 'all', risk: 'all' })
+  }
+
   return (
     <div className="filters">
-      <div className="filters-group">
-        <span className="filters-label">Status</span>
-        <div className="chip-group">
-          {['all', 'discovery', 'development', 'on_hold'].map((key) => (
-            <button
-              key={key}
-              type="button"
-              className={`chip ${filter.status === key ? 'chip-active' : ''}`}
-              onClick={() => onChange({ ...filter, status: key })}
+      <div className="filters-header">
+        <div className="filters-title">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 4h14M5 9h8M7 14h4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+          <span>Filter Projects</span>
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            className="filter-clear-button"
+            onClick={handleClearFilters}
+            aria-label="Clear all filters"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
             >
-              {key === 'all' ? 'All' : STATUS_LABELS[key]}
-            </button>
-          ))}
+              <path
+                d="M12 4L4 12M4 4l8 8"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      <div className="filters-content">
+        <div className="filters-group">
+          <span className="filters-label">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
+              <path
+                d="M7 3.5v3.5l2 2"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            Status
+          </span>
+          <div className="chip-group">
+            {['all', 'discovery', 'development', 'on_hold', 'completed'].map((key) => {
+              const count = statusCounts[key] || 0
+              const isActive = filter.status === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={`chip chip-with-count ${isActive ? 'chip-active' : ''}`}
+                  onClick={() => onChange({ ...filter, status: key })}
+                  aria-pressed={isActive}
+                >
+                  <span className="chip-label">
+                    {key === 'all' ? 'All' : STATUS_LABELS[key]}
+                  </span>
+                  <span className={`chip-count ${isActive ? 'chip-count-active' : ''}`}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="filters-group">
+          <span className="filters-label">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M7 2L9 5.5L13 6L10 8.5L10.5 12.5L7 10.5L3.5 12.5L4 8.5L1 6L5 5.5L7 2Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+            Risk Level
+          </span>
+          <div className="chip-group">
+            {['all', 'on-track', 'watch', 'at-risk'].map((key) => {
+              const count = riskCounts[key] || 0
+              const isActive = filter.risk === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={`chip chip-with-count chip-risk-${key} ${isActive ? 'chip-active' : ''}`}
+                  onClick={() => onChange({ ...filter, risk: key })}
+                  aria-pressed={isActive}
+                >
+                  <span className="chip-label">
+                    {key === 'all'
+                      ? 'All'
+                      : key === 'on-track'
+                        ? 'On Track'
+                        : key === 'watch'
+                          ? 'Watch'
+                          : 'At Risk'}
+                  </span>
+                  <span className={`chip-count ${isActive ? 'chip-count-active' : ''}`}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
-      <div className="filters-group">
-        <span className="filters-label">Risk</span>
-        <div className="chip-group">
-          {['all', 'on-track', 'watch', 'at-risk'].map((key) => (
-            <button
-              key={key}
-              type="button"
-              className={`chip ${filter.risk === key ? 'chip-active' : ''}`}
-              onClick={() => onChange({ ...filter, risk: key })}
-            >
-              {key === 'all'
-                ? 'All'
-                : key === 'on-track'
-                  ? 'On Track'
-                  : key === 'watch'
-                    ? 'Watch'
-                    : 'At Risk'}
-            </button>
-          ))}
+
+      {hasActiveFilters && (
+        <div className="filters-summary">
+          <span className="filters-summary-text">
+            Showing {filteredCount} of {projects.length} projects
+          </span>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -843,6 +1119,7 @@ function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
                 <option value="discovery">In Discovery</option>
                 <option value="development">In Development</option>
                 <option value="on_hold">On Hold</option>
+                <option value="completed">Completed</option>
               </select>
             </label>
             <label>
@@ -1051,9 +1328,30 @@ function App() {
   })
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingProject, setEditingProject] = useState(null)
+  const [activeId, setActiveId] = useState(null)
   const fileInputRef = useRef(null)
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Drag and drop sensors with improved settings
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // Reduced distance for more responsive feel
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      onActivation: (event) => {
+        // Announce to screen readers
+        const target = event.target.closest('[data-sortable-id]')
+        if (target) {
+          const projectName = target.querySelector('.project-card__title')?.textContent || 'project'
+          // You could use a live region here for better accessibility
+        }
+      },
+    })
+  )
 
   // Initialize data service and load projects
   useEffect(() => {
@@ -1091,6 +1389,44 @@ function App() {
     [projects],
   )
 
+  // Get ordered projects for overview page
+  const orderedProjects = useMemo(() => {
+    // Create a map of current projects for quick lookup
+    const projectMap = new Map(projects.map(p => [p.id, p]))
+    
+    // Get the custom order
+    const order = dataService.getProjectOrder()
+    if (order && order.length > 0) {
+      // Sort by custom order, then append any projects not in the order
+      const ordered = []
+      const unordered = []
+      
+      order.forEach(id => {
+        const project = projectMap.get(id)
+        if (project) {
+          ordered.push(project)
+          projectMap.delete(id)
+        }
+      })
+      
+      // Add any projects not in the custom order
+      projectMap.forEach(project => unordered.push(project))
+      
+      return [...ordered, ...unordered]
+    }
+    
+    return projects
+  }, [projects])
+
+  const orderedProjectsWithDerived = useMemo(
+    () =>
+      orderedProjects.map((p) => ({
+        ...p,
+        derived: computeProjectDerived(p),
+      })),
+    [orderedProjects],
+  )
+
   const filtered = useMemo(
     () =>
       projectsWithDerived.filter((p) => {
@@ -1100,6 +1436,56 @@ function App() {
       }),
     [projectsWithDerived, filter],
   )
+
+  // Filtered ordered projects for overview page (maintains custom order)
+  const filteredOrdered = useMemo(() => {
+    const orderedIds = orderedProjectsWithDerived.map((p) => p.id)
+    const orderedMap = new Map(orderedProjectsWithDerived.map((p) => [p.id, p]))
+    
+    return orderedIds
+      .map((id) => orderedMap.get(id))
+      .filter((p) => {
+        if (!p) return false
+        if (filter.status !== 'all' && p.status !== filter.status) return false
+        if (filter.risk !== 'all' && p.derived.overallRisk !== filter.risk) return false
+        return true
+      })
+  }, [orderedProjectsWithDerived, filter])
+
+  function handleDragStart(event) {
+    setActiveId(event.active.id)
+  }
+
+  function handleDragEnd(event) {
+    const { active, over } = event
+    setActiveId(null)
+
+    if (over && active.id !== over.id) {
+      // Get current order from dataService
+      const currentOrder = dataService.getProjectOrder()
+      const orderedIds = currentOrder || orderedProjects.map((p) => p.id)
+      
+      // Find indices in the full ordered list
+      const oldIndex = orderedIds.indexOf(active.id)
+      const newIndex = orderedIds.indexOf(over.id)
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reordered = arrayMove(orderedIds, oldIndex, newIndex)
+        
+        // Update the order in dataService
+        dataService.updateProjectOrder(reordered)
+      }
+    }
+  }
+
+  function handleDragCancel() {
+    setActiveId(null)
+  }
+
+  // Get the active project for drag overlay
+  const activeProject = activeId
+    ? filteredOrdered.find((p) => p.id === activeId)
+    : null
 
   function handleExport() {
     try {
@@ -1235,6 +1621,14 @@ function App() {
               On-hold projects
             </NavLink>
             <NavLink
+              to="/completed"
+              className={({ isActive }) =>
+                `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
+              }
+            >
+              Completed projects
+            </NavLink>
+            <NavLink
               to="/timeline"
               className={({ isActive }) =>
                 `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
@@ -1293,27 +1687,58 @@ function App() {
                       <h1>Portfolio overview</h1>
                       <p className="subtitle">
                         Live view of discovery, development, and on-hold work with risks
-                        highlighted.
+                        highlighted. Use the drag handle to reorder projects.
                       </p>
                     </div>
                   </header>
 
-                  <Filters filter={filter} onChange={setFilter} />
+                  <Filters 
+                    filter={filter} 
+                    onChange={setFilter}
+                    projects={projects}
+                    projectsWithDerived={orderedProjectsWithDerived}
+                    filteredCount={filteredOrdered.length}
+                  />
 
-                  <section className="projects-grid">
-                    {filtered.length === 0 ? (
-                      <p className="muted">No projects match the current filters.</p>
-                    ) : (
-                      filtered.map((project) => (
-                        <ProjectCard
-                          key={project.id}
-                          project={project}
-                          onEdit={handleEdit}
-                          onDelete={handleDelete}
-                        />
-                      ))
-                    )}
-                  </section>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={filteredOrdered.map((p) => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <section className="projects-grid">
+                        {filteredOrdered.length === 0 ? (
+                          <p className="muted">No projects match the current filters.</p>
+                        ) : (
+                          filteredOrdered.map((project) => (
+                            <SortableProjectCard
+                              key={project.id}
+                              project={project}
+                              onEdit={handleEdit}
+                              onDelete={handleDelete}
+                            />
+                          ))
+                        )}
+                      </section>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeProject ? (
+                        <div className="drag-overlay-card">
+                          <ProjectCard
+                            project={activeProject}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            isDragging={true}
+                          />
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 </>
               }
             />
@@ -1414,6 +1839,38 @@ function App() {
               }
             />
             <Route
+              path="/completed"
+              element={
+                <>
+                  <header className="app-header">
+                    <div>
+                      <h1>Completed projects</h1>
+                      <p className="subtitle">
+                        Successfully completed projects and delivered initiatives.
+                      </p>
+                    </div>
+                  </header>
+                  <section className="projects-grid">
+                    {projectsWithDerived.filter((p) => p.status === 'completed').length ===
+                    0 ? (
+                      <p className="muted">No completed projects yet.</p>
+                    ) : (
+                      projectsWithDerived
+                        .filter((p) => p.status === 'completed')
+                        .map((project) => (
+                          <ProjectCard
+                            key={project.id}
+                            project={project}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                          />
+                        ))
+                    )}
+                  </section>
+                </>
+              }
+            />
+            <Route
               path="/timeline"
               element={<TimelineView projects={projectsWithDerived} />}
             />
@@ -1462,17 +1919,57 @@ function App() {
                             <td className="manage-actions">
                               <button
                                 type="button"
-                                className="link-button"
+                                className="icon-button"
                                 onClick={() => handleEdit(p)}
+                                aria-label="Edit project"
+                                title="Edit project"
                               >
-                                Edit
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    d="M11.333 2a1.414 1.414 0 0 1 2 2L4.667 12.667 2 13.333l.667-2.667L11.333 2Z"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
                               </button>
                               <button
                                 type="button"
-                                className="link-button link-danger"
+                                className="icon-button icon-button-danger"
                                 onClick={() => handleDelete(p)}
+                                aria-label="Delete project"
+                                title="Delete project"
                               >
-                                Delete
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    d="M2 4h12M6 4V2.667A1.333 1.333 0 0 1 7.333 2h1.334A1.333 1.333 0 0 1 10 2.667V4m2 0v9.333A1.333 1.333 0 0 1 10.667 14H5.333A1.333 1.333 0 0 1 4 13.333V4h8Z"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  <path
+                                    d="M6.667 7.333v4M9.333 7.333v4"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
                               </button>
                             </td>
                           </tr>
