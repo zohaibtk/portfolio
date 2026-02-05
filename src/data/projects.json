@@ -31,7 +31,12 @@
       "targetReleaseDate": "2026-03-01",
       "actualReleaseDate": null
     },
-    "notes": "Waiting for BRD to finalize discovery scope."
+    "notes": "Waiting for BRD to finalize discovery scope.",
+    "teamMembers": [
+      { "id": "tm-001", "name": "Sarah Chen", "role": "Project Manager" },
+      { "id": "tm-002", "name": "James Patel", "role": "Lead Developer" },
+      { "id": "tm-003", "name": "Mia Larson", "role": "UI Designer" }
+    ]
   },
   {
     "id": "p-002",
@@ -50,7 +55,13 @@
       "targetReleaseDate": "2026-02-01",
       "actualReleaseDate": null
     },
-    "notes": "Scope locked, focusing on integration testing."
+    "notes": "Scope locked, focusing on integration testing.",
+    "teamMembers": [
+      { "id": "tm-004", "name": "David Kim", "role": "Project Manager" },
+      { "id": "tm-005", "name": "Rachel Adams", "role": "Developer" },
+      { "id": "tm-006", "name": "Tom Wright", "role": "Developer" },
+      { "id": "tm-007", "name": "Lisa Nguyen", "role": "QA Engineer" }
+    ]
   },
   {
     "id": "p-003",
@@ -78,7 +89,11 @@
       "targetReleaseDate": "2026-04-15",
       "actualReleaseDate": null
     },
-    "notes": "Restart expected once client confirms Q3 budget."
+    "notes": "Restart expected once client confirms Q3 budget.",
+    "teamMembers": [
+      { "id": "tm-008", "name": "Kevin Russo", "role": "Project Manager" },
+      { "id": "tm-009", "name": "Amy Foster", "role": "Developer" }
+    ]
   }
 ]
 
