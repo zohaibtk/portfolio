@@ -83,9 +83,9 @@ export default function MeetingMinutesPanel({ open, project, onSave, onCancel })
               <span className="mom-panel-project-chip">{project.name}</span>
             </div>
           </div>
-          <button type="button" className="icon-button" onClick={onCancel} aria-label="Close panel">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <button type="button" className="icon-button" onClick={onCancel} aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         </header>
@@ -112,7 +112,10 @@ export default function MeetingMinutesPanel({ open, project, onSave, onCancel })
                 />
               </label>
               <label>
-                <span>Title / Agenda</span>
+                <span>
+                  Title / Agenda
+                  <span className="required-indicator">*</span>
+                </span>
                 <input
                   type="text"
                   value={editingMom.title}

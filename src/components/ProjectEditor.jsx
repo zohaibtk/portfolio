@@ -2,8 +2,46 @@ import { useState, useEffect } from 'react'
 import RichTextEditor from './RichTextEditor.jsx'
 import { getAvatarColor, getInitials } from '../utils/projectUtils.js'
 
+function CollapsibleSection({ title, isCollapsed, onToggle, children }) {
+  return (
+    <section className="editor-section">
+      <button
+        type="button"
+        className="editor-section-toggle"
+        onClick={onToggle}
+        aria-expanded={!isCollapsed}
+      >
+        <span className="editor-section-toggle__title">{title}</span>
+        <svg
+          className={`editor-section-toggle__chevron ${isCollapsed ? 'editor-section-toggle__chevron--collapsed' : ''}`}
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path d="M3.5 5.25L7 8.75l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {!isCollapsed && <div className="editor-section-body">{children}</div>}
+    </section>
+  )
+}
+
 export default function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
   const isEditing = Boolean(initialProject?.id)
+  const [collapsed, setCollapsed] = useState({
+    basicInfo: false,
+    discovery: true,
+    development: true,
+    team: true,
+    notes: true,
+  })
+  const [validationErrors, setValidationErrors] = useState({})
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+
+  const toggle = (key) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
+
   const [form, setForm] = useState(() => ({
     id: initialProject?.id ?? null,
     name: initialProject?.name ?? '',
@@ -119,9 +157,45 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
     })
   }
 
+  function validateForm() {
+    const errors = {}
+
+    if (!form.name.trim()) {
+      errors.name = 'Project name is required'
+    }
+
+    if (form.status === 'on_hold' && !form.onHoldReason.trim()) {
+      errors.onHoldReason = 'Please provide a reason for the hold status'
+    }
+
+    // Date validations
+    if (form.devStartDate && form.devTargetReleaseDate) {
+      const start = new Date(form.devStartDate)
+      const target = new Date(form.devTargetReleaseDate)
+      if (target < start) {
+        errors.devTargetReleaseDate = 'Target release cannot be before start date'
+      }
+    }
+
+    return errors
+  }
+
   function handleSubmit(e) {
     e.preventDefault()
-    if (!form.name.trim()) return
+    setSubmitAttempted(true)
+
+    const errors = validateForm()
+    setValidationErrors(errors)
+
+    const hasBlockingErrors = !form.name.trim() ||
+      (form.status === 'on_hold' && !form.onHoldReason.trim())
+
+    if (hasBlockingErrors) {
+      if (!form.name.trim()) {
+        setCollapsed((prev) => ({ ...prev, basicInfo: false }))
+      }
+      return
+    }
     const result = {
       id: form.id,
       name: form.name.trim(),
@@ -173,232 +247,263 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
               Capture key tracking fields; automation will update risk and status.
             </p>
           </div>
-          <button type="button" className="ghost-button" onClick={onCancel}>
-            Close
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onCancel}
+            aria-label="Close"
+            title="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
         </header>
 
         <form className="editor-form" onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <label>
-              <span>Project name *</span>
-              <input
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-              />
-            </label>
-            <label>
-              <span>Client</span>
-              <input
-                name="client"
-                value={form.client}
-                onChange={handleChange}
-              />
-            </label>
-            <label>
-              <span>Status</span>
-              <select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-              >
-                <option value="discovery">In Discovery</option>
-                <option value="development">In Development</option>
-                <option value="on_hold">On Hold</option>
-                <option value="completed">Completed</option>
-              </select>
-            </label>
-            <label>
-              <span>Priority</span>
-              <select
-                name="priority"
-                value={form.priority}
-                onChange={handleChange}
-              >
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </label>
-            <label>
-              <span>Discovery target complete</span>
-              <input
-                type="date"
-                name="discoveryTargetCompleteDate"
-                value={form.discoveryTargetCompleteDate}
-                onChange={handleChange}
-              />
-            </label>
-            <label>
-              <span>Discovery actual complete</span>
-              <input
-                type="date"
-                name="discoveryActualCompleteDate"
-                value={form.discoveryActualCompleteDate}
-                onChange={handleChange}
-              />
-            </label>
-          </div>
-          <RichTextEditor
-            label="Discovery notes"
-            value={form.discoveryNotes}
-            onChange={(html) => setForm((prev) => ({ ...prev, discoveryNotes: html }))}
-            placeholder="Add notes about discovery phase, requirements, findings, etc."
-          />
-          <div style={{ marginTop: '0.5rem' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '0.3rem',
-              }}
-            >
-              <span className="section-title">Discovery required artifacts</span>
-              <button
-                type="button"
-                className="ghost-button ghost-small"
-                onClick={handleAddArtifact}
-              >
-                + Add artifact
-              </button>
+          {/* Basic Info Section */}
+          <CollapsibleSection title="Basic Information" isCollapsed={collapsed.basicInfo} onToggle={() => toggle('basicInfo')}>
+            <div className="form-grid">
+              <label className={validationErrors.name ? 'form-field-error' : ''}>
+                <span>
+                  Project name
+                  <span className="required-indicator">*</span>
+                </span>
+                <input
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                />
+                {validationErrors.name && (
+                  <span className="field-error-message">{validationErrors.name}</span>
+                )}
+              </label>
+              <label>
+                <span>Client</span>
+                <input
+                  name="client"
+                  value={form.client}
+                  onChange={handleChange}
+                />
+              </label>
+              <label>
+                <span>Status</span>
+                <select
+                  name="status"
+                  value={form.status}
+                  onChange={handleChange}
+                >
+                  <option value="discovery">In Discovery</option>
+                  <option value="development">In Development</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </label>
+              <label>
+                <span>Priority</span>
+                <select
+                  name="priority"
+                  value={form.priority}
+                  onChange={handleChange}
+                >
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
             </div>
-            {form.discoveryRequiredArtifacts?.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {form.discoveryRequiredArtifacts.map((a, index) => (
-                  <div key={a.id} className="artifact-editor-row">
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.25rem' }}>
-                      <input
-                        value={a.name || ''}
-                        onChange={(e) =>
-                          handleArtifactChange(index, 'name', e.target.value)
-                        }
-                        placeholder="Artifact name (e.g. Requirements doc)"
-                        style={{ flex: 2 }}
-                      />
-                      <input
-                        value={a.owner || ''}
-                        onChange={(e) =>
-                          handleArtifactChange(index, 'owner', e.target.value)
-                        }
-                        placeholder="Owner (e.g. Client)"
-                        style={{ flex: 1 }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem' }}>
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ color: '#94a3b8', flexShrink: 0 }}>
-                        <path d="M6.5 9.5l3-3M5 11L2.5 13.5a1.06 1.06 0 0 0 1.5 1.5L6.5 12.5M10.5 5l2.5-2.5a1.06 1.06 0 0 0-1.5-1.5L9 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                      <input
-                        value={a.fileUrl || ''}
-                        onChange={(e) =>
-                          handleArtifactChange(index, 'fileUrl', e.target.value)
-                        }
-                        placeholder="File link (optional)"
-                        style={{ flex: 1 }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        fontSize: '0.75rem',
-                      }}
-                    >
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ color: '#94a3b8' }}>Due date</span>
-                        <input
-                          type="date"
-                          value={a.dueDate || ''}
-                          onChange={(e) =>
-                            handleArtifactChange(index, 'dueDate', e.target.value)
-                          }
-                        />
-                      </label>
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ color: '#94a3b8' }}>Received</span>
-                        <input
-                          type="date"
-                          value={a.receivedDate || ''}
-                          onChange={(e) =>
-                            handleArtifactChange(index, 'receivedDate', e.target.value)
-                          }
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        className="link-button link-danger"
-                        onClick={() => handleRemoveArtifact(index)}
-                        style={{ marginLeft: 'auto' }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            {form.status === 'on_hold' && (
+              <div className="form-grid" style={{ marginTop: '0.75rem' }}>
+                <label className={validationErrors.onHoldReason ? 'form-field-error' : ''} style={{ gridColumn: '1 / -1' }}>
+                  <span>
+                    On hold reason
+                    <span className="required-indicator">*</span>
+                  </span>
+                  <input
+                    name="onHoldReason"
+                    value={form.onHoldReason}
+                    onChange={handleChange}
+                    placeholder="Waiting for client prioritisation"
+                    required
+                  />
+                  {validationErrors.onHoldReason && (
+                    <span className="field-error-message">{validationErrors.onHoldReason}</span>
+                  )}
+                </label>
               </div>
-            ) : (
-              <p className="muted">No required artifacts added for discovery.</p>
             )}
-          </div>
-          <div className="form-grid">
-            <label>
-              <span>Development start date</span>
-              <input
-                type="date"
-                name="devStartDate"
-                value={form.devStartDate}
-                onChange={handleChange}
-              />
-            </label>
-            <label>
-              <span>Development target release</span>
-              <input
-                type="date"
-                name="devTargetReleaseDate"
-                value={form.devTargetReleaseDate}
-                onChange={handleChange}
-              />
-            </label>
-            <label>
-              <span>Development actual release</span>
-              <input
-                type="date"
-                name="devActualReleaseDate"
-                value={form.devActualReleaseDate}
-                onChange={handleChange}
-              />
-            </label>
-            <label>
-              <span>On hold reason (if on hold)</span>
-              <input
-                name="onHoldReason"
-                value={form.onHoldReason}
-                onChange={handleChange}
-                placeholder="Waiting for client prioritisation"
-              />
-            </label>
-          </div>
-          <RichTextEditor
-            label="Notes"
-            value={form.notes}
-            onChange={(html) => setForm((prev) => ({ ...prev, notes: html }))}
-            placeholder="General project notes, decisions, blockers, context, etc."
-          />
+          </CollapsibleSection>
 
-          <div style={{ marginTop: '1rem' }}>
+          {/* Discovery Section */}
+          <CollapsibleSection title="Discovery" isCollapsed={collapsed.discovery} onToggle={() => toggle('discovery')}>
+            <div className="form-grid">
+              <label>
+                <span>Discovery target complete</span>
+                <input
+                  type="date"
+                  name="discoveryTargetCompleteDate"
+                  value={form.discoveryTargetCompleteDate}
+                  onChange={handleChange}
+                />
+              </label>
+              <label>
+                <span>Discovery actual complete</span>
+                <input
+                  type="date"
+                  name="discoveryActualCompleteDate"
+                  value={form.discoveryActualCompleteDate}
+                  onChange={handleChange}
+                />
+              </label>
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <RichTextEditor
+                label="Discovery notes"
+                value={form.discoveryNotes}
+                onChange={(html) => setForm((prev) => ({ ...prev, discoveryNotes: html }))}
+                placeholder="Add notes about discovery phase, requirements, findings, etc."
+              />
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <span className="section-title">Required artifacts</span>
+                <button
+                  type="button"
+                  className="ghost-button ghost-small"
+                  onClick={handleAddArtifact}
+                >
+                  + Add artifact
+                </button>
+              </div>
+              {form.discoveryRequiredArtifacts?.length ? (
+                <div className="artifacts-editor-list">
+                  {form.discoveryRequiredArtifacts.map((a, index) => (
+                    <div key={a.id} className="artifact-editor-card">
+                      <div className="artifact-editor-header">
+                        <input
+                          className="artifact-editor-name-input"
+                          value={a.name || ''}
+                          onChange={(e) =>
+                            handleArtifactChange(index, 'name', e.target.value)
+                          }
+                          placeholder="Artifact name (e.g. Requirements doc)"
+                        />
+                        <button
+                          type="button"
+                          className="link-button link-danger"
+                          onClick={() => handleRemoveArtifact(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="artifact-editor-grid">
+                        <div className="artifact-editor-field">
+                          <span className="artifact-editor-field-label">Owner</span>
+                          <input
+                            value={a.owner || ''}
+                            onChange={(e) =>
+                              handleArtifactChange(index, 'owner', e.target.value)
+                            }
+                            placeholder="e.g. Client"
+                          />
+                        </div>
+                        <div className="artifact-editor-field">
+                          <span className="artifact-editor-field-label">Due date</span>
+                          <input
+                            type="date"
+                            value={a.dueDate || ''}
+                            onChange={(e) =>
+                              handleArtifactChange(index, 'dueDate', e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="artifact-editor-field">
+                          <span className="artifact-editor-field-label">Received date</span>
+                          <input
+                            type="date"
+                            value={a.receivedDate || ''}
+                            onChange={(e) =>
+                              handleArtifactChange(index, 'receivedDate', e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="artifact-editor-field artifact-editor-field-full">
+                          <span className="artifact-editor-field-label">File link</span>
+                          <input
+                            value={a.fileUrl || ''}
+                            onChange={(e) =>
+                              handleArtifactChange(index, 'fileUrl', e.target.value)
+                            }
+                            placeholder="https://... (optional)"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="artifacts-empty-state">
+                  <h4 className="artifacts-empty-state-title">No artifacts yet</h4>
+                  <p className="artifacts-empty-state-text">Add required artifacts for the discovery phase</p>
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
+          {/* Development Section */}
+          <CollapsibleSection title="Development" isCollapsed={collapsed.development} onToggle={() => toggle('development')}>
+            <div className="form-grid">
+              <label>
+                <span>Development start date</span>
+                <input
+                  type="date"
+                  name="devStartDate"
+                  value={form.devStartDate}
+                  onChange={handleChange}
+                />
+              </label>
+              <label className={validationErrors.devTargetReleaseDate ? 'form-field-error' : ''}>
+                <span>Development target release</span>
+                <input
+                  type="date"
+                  name="devTargetReleaseDate"
+                  value={form.devTargetReleaseDate}
+                  onChange={handleChange}
+                />
+                {validationErrors.devTargetReleaseDate && (
+                  <span className="field-error-message">{validationErrors.devTargetReleaseDate}</span>
+                )}
+              </label>
+              <label>
+                <span>Development actual release</span>
+                <input
+                  type="date"
+                  name="devActualReleaseDate"
+                  value={form.devActualReleaseDate}
+                  onChange={handleChange}
+                />
+              </label>
+            </div>
+          </CollapsibleSection>
+
+          {/* Team Section */}
+          <CollapsibleSection title="Team Members" isCollapsed={collapsed.team} onToggle={() => toggle('team')}>
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: '0.3rem',
+                marginBottom: '0.75rem',
               }}
             >
-              <span className="section-title">Team Members</span>
+              <span className="section-title">Team members</span>
               <button
                 type="button"
                 className="ghost-button ghost-small"
@@ -453,7 +558,17 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
             ) : (
               <p className="muted">No team members added yet.</p>
             )}
-          </div>
+          </CollapsibleSection>
+
+          {/* Notes Section */}
+          <CollapsibleSection title="Notes" isCollapsed={collapsed.notes} onToggle={() => toggle('notes')}>
+            <RichTextEditor
+              label="General notes"
+              value={form.notes}
+              onChange={(html) => setForm((prev) => ({ ...prev, notes: html }))}
+              placeholder="General project notes, decisions, blockers, context, etc."
+            />
+          </CollapsibleSection>
 
           <footer className="editor-footer">
             <div className="editor-footer-left">
