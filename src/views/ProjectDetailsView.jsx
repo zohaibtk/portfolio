@@ -127,15 +127,50 @@ export default function ProjectDetailsView({ projects, onEdit, onDelete, onMom }
             <dd>{project.development?.startDate || '—'}</dd>
           </div>
           <div>
-            <dt>Dev target release</dt>
-            <dd>{project.development?.targetReleaseDate || '—'}</dd>
-          </div>
-          <div>
-            <dt>Release</dt>
-            <dd>{project.development?.actualReleaseDate || '—'}</dd>
+            <dt>Total releases</dt>
+            <dd>{project.development?.releases?.length || 0}</dd>
           </div>
         </dl>
       </section>
+
+      {project.development?.releases?.length > 0 && (
+        <section className="details-section">
+          <h3 className="section-title">Development Releases</h3>
+          <div className="releases-list">
+            {project.development.releases.map((rel) => {
+              const isLate = rel.endDate && isPast(rel.endDate) && !rel.actualEndDate
+              const isComplete = !!rel.actualEndDate
+              return (
+                <div key={rel.id} className="release-item">
+                  <div className="release-item-header">
+                    <span className="release-item-name">{rel.name || 'Unnamed Release'}</span>
+                    <span className={`release-item-status ${isComplete ? 'status-complete' : isLate ? 'status-late' : 'status-pending'}`}>
+                      {isComplete ? 'Released' : isLate ? 'Overdue' : 'Planned'}
+                    </span>
+                  </div>
+                  <dl className="release-item-dates">
+                    <div>
+                      <dt>Start</dt>
+                      <dd>{rel.startDate || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Target</dt>
+                      <dd>{rel.endDate || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Released</dt>
+                      <dd>{rel.actualEndDate || '—'}</dd>
+                    </div>
+                  </dl>
+                  {rel.notes && (
+                    <p className="release-item-notes">{rel.notes}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {project.discovery && (
         <section className="details-section">

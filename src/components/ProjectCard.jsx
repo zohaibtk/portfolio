@@ -294,18 +294,50 @@ export default function ProjectCard({ project, onEdit, onDelete, onMom, dragHand
         <CollapsibleSection title="Development" isCollapsed={!!collapsed.development} onToggle={() => toggle('development')}>
           <dl className="summary-grid">
             <div>
-              <dt>Start Date</dt>
+              <dt>Dev Start</dt>
               <dd>{project.development?.startDate || '—'}</dd>
             </div>
             <div>
-              <dt>Target Release</dt>
-              <dd>{project.development?.targetReleaseDate || '—'}</dd>
-            </div>
-            <div>
-              <dt>Actual Release</dt>
-              <dd>{project.development?.actualReleaseDate || '—'}</dd>
+              <dt>Releases</dt>
+              <dd>{project.development?.releases?.length || 0}</dd>
             </div>
           </dl>
+
+          {project.development?.releases?.length > 0 && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <h4 style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 0.4rem' }}>
+                Release Schedule
+              </h4>
+              <table className="releases-table">
+                <thead>
+                  <tr>
+                    <th>Release</th>
+                    <th>Start</th>
+                    <th>Target</th>
+                    <th>Actual</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {project.development.releases.map((rel) => {
+                    const isComplete = !!rel.actualEndDate
+                    const isOverdue = !isComplete && rel.endDate && isPast(rel.endDate)
+                    const statusClass = isComplete ? 'status-complete' : isOverdue ? 'status-late' : 'status-planned'
+                    const statusText = isComplete ? 'Released' : isOverdue ? 'Overdue' : 'Planned'
+                    return (
+                      <tr key={rel.id}>
+                        <td>{rel.name || 'Unnamed'}</td>
+                        <td>{rel.startDate || '—'}</td>
+                        <td>{rel.endDate || '—'}</td>
+                        <td>{rel.actualEndDate || '—'}</td>
+                        <td className={statusClass}>{statusText}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CollapsibleSection>
       )}
 

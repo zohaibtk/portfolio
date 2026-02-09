@@ -20,11 +20,13 @@ export default function TimelineView({ projects }) {
     if (project.development?.startDate) {
       allDates.push(parseDate(project.development.startDate))
     }
-    if (project.development?.targetReleaseDate) {
-      allDates.push(parseDate(project.development.targetReleaseDate))
-    }
-    if (project.development?.actualReleaseDate) {
-      allDates.push(parseDate(project.development.actualReleaseDate))
+    // Collect dates from all releases
+    if (project.development?.releases) {
+      project.development.releases.forEach((rel) => {
+        if (rel.startDate) allDates.push(parseDate(rel.startDate))
+        if (rel.endDate) allDates.push(parseDate(rel.endDate))
+        if (rel.actualEndDate) allDates.push(parseDate(rel.actualEndDate))
+      })
     }
   })
 
@@ -201,8 +203,21 @@ export default function TimelineView({ projects }) {
             const discoveryStart = getDatePosition(project.discovery?.targetCompleteDate)
             const discoveryEnd = getDatePosition(project.discovery?.actualCompleteDate)
             const devStart = getDatePosition(project.development?.startDate)
-            const devTarget = getDatePosition(project.development?.targetReleaseDate)
-            const devActual = getDatePosition(project.development?.actualReleaseDate)
+
+            // Get all release milestones
+            const releases = (project.development?.releases || []).map((rel) => ({
+              id: rel.id,
+              name: rel.name,
+              start: getDatePosition(rel.startDate),
+              target: getDatePosition(rel.endDate),
+              actual: getDatePosition(rel.actualEndDate),
+            }))
+
+            // Find the last release end date for the dev phase bar
+            const lastReleaseEnd = releases.reduce((max, rel) => {
+              const end = rel.actual ?? rel.target
+              return end !== null && (max === null || end > max) ? end : max
+            }, null)
 
             return (
               <div key={project.id} className={`timeline-row timeline-row-status-${project.status}`}>
@@ -242,6 +257,7 @@ export default function TimelineView({ projects }) {
                 </div>
                 <div className="timeline-row-track">
                   <div className="timeline-track">
+                    {/* Discovery phase bar */}
                     {discoveryStart !== null && discoveryEnd !== null && (() => {
                       const barStart = Math.min(discoveryStart, discoveryEnd)
                       const width = Math.abs(discoveryEnd - discoveryStart)
@@ -249,13 +265,14 @@ export default function TimelineView({ projects }) {
                         <div className="timeline-phase-bar timeline-phase-bar-discovery" style={{ left: `${barStart}%`, width: `${width}%` }} />
                       ) : null
                     })()}
-                    {devStart !== null && (devTarget !== null || devActual !== null) && (() => {
-                      const barEnd = devActual !== null && devTarget !== null ? Math.max(devTarget, devActual) : (devActual ?? devTarget)
-                      const width = barEnd - devStart
-                      return width > 0 ? (
-                        <div className={`timeline-phase-bar timeline-phase-bar-dev${devActual !== null ? ' timeline-phase-bar-complete' : ''}`} style={{ left: `${devStart}%`, width: `${width}%` }} />
-                      ) : null
-                    })()}
+                    {/* Development phase bar - spans from dev start to last release */}
+                    {devStart !== null && lastReleaseEnd !== null && lastReleaseEnd > devStart && (
+                      <div
+                        className={`timeline-phase-bar timeline-phase-bar-dev${releases.every(r => r.actual !== null) ? ' timeline-phase-bar-complete' : ''}`}
+                        style={{ left: `${devStart}%`, width: `${lastReleaseEnd - devStart}%` }}
+                      />
+                    )}
+                    {/* Discovery milestones */}
                     {discoveryStart !== null && (
                       <div
                         className="timeline-milestone timeline-discovery"
@@ -276,6 +293,7 @@ export default function TimelineView({ projects }) {
                         <div className="timeline-milestone-label">Discovery Done</div>
                       </div>
                     )}
+                    {/* Dev start milestone */}
                     {devStart !== null && (
                       <div
                         className="timeline-milestone timeline-dev-start"
@@ -286,36 +304,43 @@ export default function TimelineView({ projects }) {
                         <div className="timeline-milestone-label">Dev Start</div>
                       </div>
                     )}
-                    {devTarget !== null && (
-                      <div
-                        className="timeline-milestone timeline-dev-target"
-                        style={{ left: `${devTarget}%` }}
-                        title={`Release target: ${formatDate(project.development?.targetReleaseDate)}`}
-                      >
-                        <div className="timeline-milestone-dot" />
-                        <div className="timeline-milestone-label">Release Target</div>
-                      </div>
-                    )}
-                    {devActual !== null && (
-                      <div
-                        className="timeline-milestone timeline-dev-complete"
-                        style={{ left: `${devActual}%` }}
-                        title={`Released: ${formatDate(project.development?.actualReleaseDate)}`}
-                      >
-                        <div className="timeline-milestone-dot" />
-                        <div className="timeline-milestone-label">Released</div>
-                      </div>
-                    )}
+                    {/* Release milestones */}
+                    {releases.map((rel) => (
+                      <span key={rel.id}>
+                        {rel.target !== null && (
+                          <div
+                            className="timeline-milestone timeline-dev-target"
+                            style={{ left: `${rel.target}%` }}
+                            title={`${rel.name || 'Release'} target`}
+                          >
+                            <div className="timeline-milestone-dot" />
+                            <div className="timeline-milestone-label">{rel.name || 'Target'}</div>
+                          </div>
+                        )}
+                        {rel.actual !== null && (
+                          <div
+                            className="timeline-milestone timeline-dev-complete"
+                            style={{ left: `${rel.actual}%` }}
+                            title={`${rel.name || 'Release'} released`}
+                          >
+                            <div className="timeline-milestone-dot" />
+                            <div className="timeline-milestone-label">{rel.name || 'Released'}</div>
+                          </div>
+                        )}
+                      </span>
+                    ))}
+                    {/* On hold marker */}
                     {project.status === 'on_hold' && (
                       <div
                         className="timeline-milestone timeline-onhold"
-                        style={{ left: `${discoveryStart ?? devTarget ?? 3}%` }}
+                        style={{ left: `${discoveryStart ?? (releases[0]?.target) ?? 3}%` }}
                         title="Project is currently on hold"
                       >
                         <div className="timeline-milestone-dot" />
                         <div className="timeline-milestone-label">On Hold</div>
                       </div>
                     )}
+                    {/* Today marker */}
                     {(() => {
                       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
                       const todayPos = getDatePosition(todayStr)

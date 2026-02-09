@@ -35,7 +35,8 @@ src/
 │   ├── SortableTableRow.jsx     # @dnd-kit sortable <tr>
 │   ├── RichTextEditor.jsx       # ReactQuill wrapper
 │   ├── RiskChip.jsx
-│   └── StatusPill.jsx
+│   ├── StatusPill.jsx
+│   └── MeetingMinutesPanel.jsx  # Slide-over panel for per-project meeting notes
 ├── views/               # One file per route (or group of routes)
 │   ├── OverviewView.jsx         # /overview — filters + card grid
 │   ├── StatusView.jsx           # /discovery, /development, /on-hold, /completed (parameterised)

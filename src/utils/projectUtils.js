@@ -52,26 +52,49 @@ export function computeProjectDerived(project) {
   const discoveryIsLate =
     !discoveryActual && discoveryTarget && discoveryTarget.getTime() < now.getTime()
 
-  const devTarget = parseDate(project.development?.targetReleaseDate)
-  const devActual = parseDate(project.development?.actualReleaseDate)
-  const devIsLate = !devActual && devTarget && devTarget.getTime() < now.getTime()
+  // Check all releases for late status
+  const releases = project.development?.releases || []
+  const lateReleases = releases.filter((rel) => {
+    const target = parseDate(rel.endDate)
+    const actual = parseDate(rel.actualEndDate)
+    return !actual && target && target.getTime() < now.getTime()
+  })
+
+  const devIsLate = lateReleases.length > 0
+
+  // Get the next upcoming release (for summary display)
+  const upcomingReleases = releases
+    .filter((rel) => !rel.actualEndDate && rel.endDate)
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
+  const nextRelease = upcomingReleases[0] || null
 
   const riskFlags = []
   if (hasLateArtifacts) riskFlags.push('Late client artifacts')
   if (discoveryIsLate) riskFlags.push('Discovery past target date')
-  if (devIsLate) riskFlags.push('Development past target release')
+  if (devIsLate) {
+    lateReleases.forEach((rel) => {
+      riskFlags.push(`Release "${rel.name || 'Unnamed'}" past target date`)
+    })
+  }
 
   const overallRisk = riskFlags.length === 0 ? 'on-track' : 'at-risk'
+
+  // Calculate days late for the most overdue release
+  const devDaysLate = lateReleases.length > 0
+    ? Math.max(...lateReleases.map((rel) => daysBetween(parseDate(rel.endDate), now)))
+    : null
 
   return {
     hasMissingArtifacts,
     hasLateArtifacts,
     discoveryIsLate,
     devIsLate,
+    lateReleases,
+    nextRelease,
     overallRisk,
     riskFlags,
     discoveryDaysLate:
       discoveryIsLate && discoveryTarget ? daysBetween(discoveryTarget, now) : null,
-    devDaysLate: devIsLate && devTarget ? daysBetween(devTarget, now) : null,
+    devDaysLate,
   }
 }

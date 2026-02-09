@@ -4,6 +4,52 @@ const STORAGE_KEY = 'pm-projects'
 const ORDER_STORAGE_KEY = 'pm-projects-order'
 
 /**
+ * Migrate project data from old structure to new releases array
+ */
+function migrateProjectData(projects) {
+  return projects.map((project) => {
+    // Check if migration needed (has old structure without releases array)
+    if (
+      project.development &&
+      !project.development.releases &&
+      (project.development.targetReleaseDate || project.development.actualReleaseDate)
+    ) {
+      // Create releases array from old structure
+      const releases = []
+      if (project.development.targetReleaseDate || project.development.actualReleaseDate) {
+        releases.push({
+          id: `rel-migrated-${project.id}`,
+          name: 'Initial Release',
+          startDate: project.development.startDate || null,
+          endDate: project.development.targetReleaseDate || null,
+          actualEndDate: project.development.actualReleaseDate || null,
+          notes: '',
+        })
+      }
+
+      return {
+        ...project,
+        development: {
+          startDate: project.development.startDate || null,
+          releases,
+        },
+      }
+    }
+    // Ensure releases array exists even if empty
+    if (project.development && !project.development.releases) {
+      return {
+        ...project,
+        development: {
+          ...project.development,
+          releases: [],
+        },
+      }
+    }
+    return project
+  })
+}
+
+/**
  * Data service for managing projects with JSON file as source of truth
  * and localStorage for runtime persistence
  */
@@ -27,8 +73,10 @@ class DataService {
         const parsed = JSON.parse(stored)
         if (Array.isArray(parsed)) {
           // Use localStorage data even if empty (user may have deleted all projects)
-          this.projects = parsed
+          // Migrate old data structure to new releases array
+          this.projects = migrateProjectData(parsed)
           this.initialized = true
+          this.saveToStorage() // Save migrated data
           this.notifyListeners()
           return this.projects
         }
@@ -39,7 +87,8 @@ class DataService {
 
     // Fallback to bundled JSON file
     try {
-      this.projects = Array.isArray(projectsData) ? [...projectsData] : []
+      const data = Array.isArray(projectsData) ? [...projectsData] : []
+      this.projects = migrateProjectData(data)
       this.initialized = true
       this.saveToStorage()
       this.notifyListeners()

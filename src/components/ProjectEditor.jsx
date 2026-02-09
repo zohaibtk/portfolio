@@ -55,8 +55,7 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
     discoveryNotes: initialProject?.discovery?.notes ?? '',
     discoveryRequiredArtifacts: initialProject?.discovery?.requiredArtifacts ?? [],
     devStartDate: initialProject?.development?.startDate ?? '',
-    devTargetReleaseDate: initialProject?.development?.targetReleaseDate ?? '',
-    devActualReleaseDate: initialProject?.development?.actualReleaseDate ?? '',
+    devReleases: initialProject?.development?.releases ?? [],
     onHoldReason: initialProject?.onHoldReason ?? '',
     notes: initialProject?.notes ?? '',
     teamMembers: initialProject?.teamMembers ?? [],
@@ -74,10 +73,9 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
       discoveryActualCompleteDate:
         initialProject?.discovery?.actualCompleteDate ?? '',
       discoveryNotes: initialProject?.discovery?.notes ?? '',
-    discoveryRequiredArtifacts: initialProject?.discovery?.requiredArtifacts ?? [],
+      discoveryRequiredArtifacts: initialProject?.discovery?.requiredArtifacts ?? [],
       devStartDate: initialProject?.development?.startDate ?? '',
-      devTargetReleaseDate: initialProject?.development?.targetReleaseDate ?? '',
-      devActualReleaseDate: initialProject?.development?.actualReleaseDate ?? '',
+      devReleases: initialProject?.development?.releases ?? [],
       onHoldReason: initialProject?.onHoldReason ?? '',
       notes: initialProject?.notes ?? '',
       teamMembers: initialProject?.teamMembers ?? [],
@@ -157,6 +155,39 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
     })
   }
 
+  function handleAddRelease() {
+    setForm((prev) => ({
+      ...prev,
+      devReleases: [
+        ...(prev.devReleases || []),
+        {
+          id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: '',
+          startDate: '',
+          endDate: '',
+          actualEndDate: null,
+          notes: '',
+        },
+      ],
+    }))
+  }
+
+  function handleReleaseChange(index, field, value) {
+    setForm((prev) => {
+      const releases = [...(prev.devReleases || [])]
+      releases[index] = { ...releases[index], [field]: value }
+      return { ...prev, devReleases: releases }
+    })
+  }
+
+  function handleRemoveRelease(index) {
+    setForm((prev) => {
+      const releases = [...(prev.devReleases || [])]
+      releases.splice(index, 1)
+      return { ...prev, devReleases: releases }
+    })
+  }
+
   function validateForm() {
     const errors = {}
 
@@ -166,15 +197,6 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
 
     if (form.status === 'on_hold' && !form.onHoldReason.trim()) {
       errors.onHoldReason = 'Please provide a reason for the hold status'
-    }
-
-    // Date validations
-    if (form.devStartDate && form.devTargetReleaseDate) {
-      const start = new Date(form.devStartDate)
-      const target = new Date(form.devTargetReleaseDate)
-      if (target < start) {
-        errors.devTargetReleaseDate = 'Target release cannot be before start date'
-      }
     }
 
     return errors
@@ -221,10 +243,17 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
           })),
       },
       development: {
-        ...(initialProject?.development || {}),
         startDate: form.devStartDate || null,
-        targetReleaseDate: form.devTargetReleaseDate || null,
-        actualReleaseDate: form.devActualReleaseDate || null,
+        releases: (form.devReleases || [])
+          .filter((r) => r.name?.trim() || r.endDate)
+          .map((r) => ({
+            ...r,
+            name: r.name?.trim() || '',
+            startDate: r.startDate || null,
+            endDate: r.endDate || null,
+            actualEndDate: r.actualEndDate || null,
+            notes: r.notes?.trim() || '',
+          })),
       },
       teamMembers: (form.teamMembers || [])
         .filter((m) => m.name?.trim())
@@ -469,27 +498,89 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
                   onChange={handleChange}
                 />
               </label>
-              <label className={validationErrors.devTargetReleaseDate ? 'form-field-error' : ''}>
-                <span>Development target release</span>
-                <input
-                  type="date"
-                  name="devTargetReleaseDate"
-                  value={form.devTargetReleaseDate}
-                  onChange={handleChange}
-                />
-                {validationErrors.devTargetReleaseDate && (
-                  <span className="field-error-message">{validationErrors.devTargetReleaseDate}</span>
-                )}
-              </label>
-              <label>
-                <span>Development actual release</span>
-                <input
-                  type="date"
-                  name="devActualReleaseDate"
-                  value={form.devActualReleaseDate}
-                  onChange={handleChange}
-                />
-              </label>
+            </div>
+
+            {/* Releases section */}
+            <div style={{ marginTop: '0.75rem' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <span className="section-title">Releases</span>
+                <button
+                  type="button"
+                  className="ghost-button ghost-small"
+                  onClick={handleAddRelease}
+                >
+                  + Add release
+                </button>
+              </div>
+              {form.devReleases?.length ? (
+                <div className="releases-editor-list">
+                  {form.devReleases.map((rel, index) => (
+                    <div key={rel.id} className="release-editor-card">
+                      <div className="release-editor-header">
+                        <input
+                          className="release-editor-name-input"
+                          value={rel.name || ''}
+                          onChange={(e) => handleReleaseChange(index, 'name', e.target.value)}
+                          placeholder="Release name (e.g. v1.0 - MVP)"
+                        />
+                        <button
+                          type="button"
+                          className="link-button link-danger"
+                          onClick={() => handleRemoveRelease(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="release-editor-grid">
+                        <div className="release-editor-field">
+                          <span className="release-editor-field-label">Start date</span>
+                          <input
+                            type="date"
+                            value={rel.startDate || ''}
+                            onChange={(e) => handleReleaseChange(index, 'startDate', e.target.value)}
+                          />
+                        </div>
+                        <div className="release-editor-field">
+                          <span className="release-editor-field-label">Target end date</span>
+                          <input
+                            type="date"
+                            value={rel.endDate || ''}
+                            onChange={(e) => handleReleaseChange(index, 'endDate', e.target.value)}
+                          />
+                        </div>
+                        <div className="release-editor-field">
+                          <span className="release-editor-field-label">Actual end date</span>
+                          <input
+                            type="date"
+                            value={rel.actualEndDate || ''}
+                            onChange={(e) => handleReleaseChange(index, 'actualEndDate', e.target.value)}
+                          />
+                        </div>
+                        <div className="release-editor-field release-editor-field-full">
+                          <span className="release-editor-field-label">Notes</span>
+                          <input
+                            value={rel.notes || ''}
+                            onChange={(e) => handleReleaseChange(index, 'notes', e.target.value)}
+                            placeholder="Release notes or description"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="releases-empty-state">
+                  <h4 className="releases-empty-state-title">No releases planned</h4>
+                  <p className="releases-empty-state-text">Add development releases to track milestones</p>
+                </div>
+              )}
             </div>
           </CollapsibleSection>
 
