@@ -12,6 +12,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import './App.css'
 import dataService from './services/dataService'
+import teamService from './services/teamService'
 import { onAuthChange, handleRedirectResult, signInWithGoogle } from './services/authService'
 import { computeProjectDerived } from './utils/projectUtils.js'
 import Sidebar from './components/Sidebar.jsx'
@@ -25,9 +26,11 @@ import ProjectListView from './views/ProjectListView.jsx'
 import ProjectDetailsView from './views/ProjectDetailsView.jsx'
 import SettingsView from './views/SettingsView.jsx'
 import TeamAllocationView from './views/TeamAllocationView.jsx'
+import TeamView from './views/TeamView.jsx'
 
 function App() {
   const [projects, setProjects] = useState([])
+  const [teamMembers, setTeamMembers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState({
     status: 'all',
@@ -68,9 +71,12 @@ function App() {
       try {
         const loadedProjects = await dataService.initialize()
         setProjects(loadedProjects)
+        const loadedTeamMembers = await teamService.initialize()
+        setTeamMembers(loadedTeamMembers)
       } catch (error) {
-        console.error('Failed to load projects:', error)
+        console.error('Failed to load data:', error)
         setProjects([])
+        setTeamMembers([])
       } finally {
         setIsLoading(false)
       }
@@ -79,12 +85,17 @@ function App() {
     loadData()
 
     // Subscribe to data changes
-    const unsubscribe = dataService.subscribe((updatedProjects) => {
+    const unsubscribeProjects = dataService.subscribe((updatedProjects) => {
       setProjects([...updatedProjects])
     })
 
+    const unsubscribeTeam = teamService.subscribe((updatedTeamMembers) => {
+      setTeamMembers([...updatedTeamMembers])
+    })
+
     return () => {
-      unsubscribe()
+      unsubscribeProjects()
+      unsubscribeTeam()
     }
   }, [])
 
@@ -94,6 +105,7 @@ function App() {
     const unsub = onAuthChange((firebaseUser) => {
       setUser(firebaseUser)
       dataService.setUser(firebaseUser)
+      teamService.setUser(firebaseUser)
       setAuthLoading(false)
     })
     return unsub
@@ -249,6 +261,33 @@ function App() {
     setMomOpen(false)
   }
 
+  async function handleCreateTeamMember(memberData) {
+    try {
+      await teamService.createTeamMember(memberData)
+    } catch (error) {
+      console.error('Create team member failed:', error)
+      throw error
+    }
+  }
+
+  async function handleUpdateTeamMember(id, memberData) {
+    try {
+      await teamService.updateTeamMember(id, memberData)
+    } catch (error) {
+      console.error('Update team member failed:', error)
+      throw error
+    }
+  }
+
+  function handleDeleteTeamMember(id) {
+    try {
+      teamService.deleteTeamMember(id)
+    } catch (error) {
+      console.error('Delete team member failed:', error)
+      throw error
+    }
+  }
+
   if (authLoading) {
     return (
       <div className="auth-screen">
@@ -394,6 +433,17 @@ function App() {
                   element={<TeamAllocationView projects={projectsWithDerived} />}
                 />
                 <Route
+                  path="/team"
+                  element={
+                    <TeamView
+                      teamMembers={teamMembers}
+                      onCreateMember={handleCreateTeamMember}
+                      onUpdateMember={handleUpdateTeamMember}
+                      onDeleteMember={handleDeleteTeamMember}
+                    />
+                  }
+                />
+                <Route
                   path="/projects"
                   element={
                     <ProjectListView
@@ -436,6 +486,7 @@ function App() {
             onSave={handleSave}
             onCancel={() => setEditorOpen(false)}
             onDelete={handleDelete}
+            availableTeamMembers={teamMembers}
           />
 
           <MeetingMinutesPanel

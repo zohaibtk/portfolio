@@ -1524,15 +1524,8 @@
   border-radius: 0.5rem;
   transition:
     background 0.15s ease,
-    color 0.15s ease,
     transform 0.1s ease;
   position: relative;
-}
-
-.icon-button:hover {
-  background: rgba(79, 70, 229, 0.1);
-  color: #4f46e5;
-  transform: scale(1.1);
 }
 
 .icon-button:active {
@@ -1555,73 +1548,12 @@
   color: #94a3b8;
 }
 
-.icon-button-danger:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-}
-
 .icon-button-danger:active {
   background: rgba(239, 68, 68, 0.15);
 }
 
 .icon-button-danger:focus {
   outline-color: rgba(239, 68, 68, 0.3);
-}
-
-/* Tooltip support */
-.icon-button[title] {
-  position: relative;
-}
-
-/* Enhanced tooltip on hover */
-.icon-button:hover::after {
-  content: attr(title);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 0.5rem;
-  padding: 0.4rem 0.6rem;
-  background: #1f2937;
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 500;
-  white-space: nowrap;
-  border-radius: 0.4rem;
-  pointer-events: none;
-  z-index: 1000;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  opacity: 0;
-  animation: tooltip-fade-in 0.2s ease forwards;
-}
-
-.icon-button:hover::before {
-  content: '';
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 0.35rem;
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid #1f2937;
-  pointer-events: none;
-  z-index: 1001;
-  opacity: 0;
-  animation: tooltip-fade-in 0.2s ease forwards;
-}
-
-@keyframes tooltip-fade-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
 }
 
 .project-card__actions {
@@ -1726,7 +1658,7 @@
 }
 
 .editor-panel {
-  width: min(420px, 100%);
+  width: min(650px, 100%);
   background: #f8fafc;
   border-left: 1px solid rgba(148, 163, 184, 0.4);
   padding: 1.1rem 1.1rem 1.3rem;
@@ -2958,6 +2890,12 @@
   font-size: 0.78rem;
 }
 
+.avatar-lg {
+  width: 48px;
+  height: 48px;
+  font-size: 1rem;
+}
+
 .avatar-overflow {
   background: #e2e8f0 !important;
   color: #64748b;
@@ -3588,7 +3526,8 @@
   letter-spacing: 0.06em;
 }
 
-.team-member-editor-label input {
+.team-member-editor-label input,
+.team-member-editor-label select {
   border-radius: 0.4rem;
   border: 1px solid rgba(148, 163, 184, 0.5);
   padding: 0.28rem 0.4rem;
@@ -3597,9 +3536,11 @@
   color: #0f172a;
   background: #fff;
   transition: border-color 0.15s ease;
+  width: 100%;
 }
 
-.team-member-editor-label input:focus {
+.team-member-editor-label input:focus,
+.team-member-editor-label select:focus {
   outline: none;
   border-color: #4f46e5;
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
@@ -3607,6 +3548,19 @@
 
 .team-member-editor-label input::placeholder {
   color: #94a3b8;
+}
+
+.team-member-editor-label select {
+  cursor: pointer;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  appearance: none;
+}
+
+.team-member-editor-label select option {
+  padding: 0.5rem;
 }
 
 .risk-sm {
@@ -4412,6 +4366,153 @@
   }
 }
 
+/* View Header */
+.view-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.view-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.25rem;
+}
+
+.view-subtitle {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Team Empty State */
+.team-empty-state {
+  max-width: 480px;
+  margin: 4rem auto;
+  text-align: center;
+  padding: 3rem 2rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+}
+
+.team-empty-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.5rem;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border-radius: 50%;
+  color: #4f46e5;
+}
+
+.team-empty-state-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.5rem;
+}
+
+.team-empty-state-text {
+  font-size: 0.9375rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Team Departments List */
+.team-departments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.team-department-section {
+  /* Container for each department group */
+}
+
+.team-department-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 1rem;
+}
+
+.team-department-count {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
+/* Team Members Grid */
+.team-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.team-member-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.team-member-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.team-member-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.team-member-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.team-member-card__name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.team-member-card__role {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.team-member-card__email {
+  font-size: 0.8125rem;
+  color: #4f46e5;
+  text-decoration: none;
+  margin-top: 0.25rem;
+}
+
+.team-member-card__email:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .team-members-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 600px) {
   .allocation-summary-cards {
     grid-template-columns: 1fr 1fr;
@@ -4433,5 +4534,13 @@
   .team-member-editor-label--allocation {
     max-width: 100%;
     flex: 1 1 100%;
+  }
+
+  .team-members-grid {
+    gap: 0.75rem;
+  }
+
+  .team-member-card {
+    padding: 1rem;
   }
 }

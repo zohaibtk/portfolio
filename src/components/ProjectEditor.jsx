@@ -28,7 +28,7 @@ function CollapsibleSection({ title, isCollapsed, onToggle, children }) {
   )
 }
 
-export default function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete }) {
+export default function ProjectEditor({ open, initialProject, onSave, onCancel, onDelete, availableTeamMembers = [] }) {
   const isEditing = Boolean(initialProject?.id)
   const [collapsed, setCollapsed] = useState({
     basicInfo: false,
@@ -131,7 +131,8 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
       teamMembers: [
         ...(prev.teamMembers || []),
         {
-          id: `tm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          id: `ptm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          teamMemberId: '',
           name: '',
           role: '',
           allocation: 100,
@@ -143,7 +144,24 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
   function handleTeamMemberChange(index, field, value) {
     setForm((prev) => {
       const members = [...(prev.teamMembers || [])]
-      members[index] = { ...members[index], [field]: value }
+
+      // If changing the team member selection, populate name and role from global team member
+      if (field === 'teamMemberId' && value) {
+        const selectedMember = availableTeamMembers.find(m => m.id === value)
+        if (selectedMember) {
+          members[index] = {
+            ...members[index],
+            teamMemberId: value,
+            name: selectedMember.name,
+            role: selectedMember.role || '',
+          }
+        } else {
+          members[index] = { ...members[index], [field]: value }
+        }
+      } else {
+        members[index] = { ...members[index], [field]: value }
+      }
+
       return { ...prev, teamMembers: members }
     })
   }
@@ -257,10 +275,11 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
           })),
       },
       teamMembers: (form.teamMembers || [])
-        .filter((m) => m.name?.trim())
+        .filter((m) => m.teamMemberId || m.name?.trim())
         .map((m) => ({
           ...m,
-          name: m.name.trim(),
+          teamMemberId: m.teamMemberId || undefined,
+          name: m.name?.trim() || '',
           role: m.role?.trim() || '',
           allocation: m.allocation ?? 100,
         })),
@@ -617,19 +636,25 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
                     </div>
                     <div className="team-member-editor-fields">
                       <label className="team-member-editor-label">
-                        <span>Name</span>
-                        <input
-                          value={m.name || ''}
-                          onChange={(e) => handleTeamMemberChange(index, 'name', e.target.value)}
-                          placeholder="Full name"
-                        />
+                        <span>Team Member</span>
+                        <select
+                          value={m.teamMemberId || ''}
+                          onChange={(e) => handleTeamMemberChange(index, 'teamMemberId', e.target.value)}
+                        >
+                          <option value="">Select a team member...</option>
+                          {availableTeamMembers.map((tm) => (
+                            <option key={tm.id} value={tm.id}>
+                              {tm.name} {tm.role ? `(${tm.role})` : ''}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="team-member-editor-label">
-                        <span>Role</span>
+                        <span>Role on Project</span>
                         <input
                           value={m.role || ''}
                           onChange={(e) => handleTeamMemberChange(index, 'role', e.target.value)}
-                          placeholder="e.g. Developer, Designer, PM"
+                          placeholder="e.g. Lead Developer, Designer"
                         />
                       </label>
                       <label className="team-member-editor-label team-member-editor-label--allocation">
