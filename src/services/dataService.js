@@ -1,7 +1,31 @@
 import projectsData from '../data/projects.json'
+import { db } from './firebase'
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  onSnapshot,
+  writeBatch,
+} from 'firebase/firestore'
 
 const STORAGE_KEY = 'pm-projects'
 const ORDER_STORAGE_KEY = 'pm-projects-order'
+
+/**
+ * Sanitize an object for Firestore — replace undefined with null recursively
+ */
+function sanitizeForFirestore(obj) {
+  if (obj === undefined) return null
+  if (obj === null || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore)
+  const result = {}
+  for (const [key, value] of Object.entries(obj)) {
+    result[key] = sanitizeForFirestore(value)
+  }
+  return result
+}
 
 /**
  * Migrate project data from old structure to new releases array
@@ -50,14 +74,19 @@ function migrateProjectData(projects) {
 }
 
 /**
- * Data service for managing projects with JSON file as source of truth
- * and localStorage for runtime persistence
+ * Data service for managing projects
+ * Supports localStorage (offline/default) and Firestore (when signed in)
  */
 class DataService {
   constructor() {
     this.projects = []
     this.listeners = []
     this.initialized = false
+    // Firestore state
+    this.currentUser = null
+    this.firestoreEnabled = false
+    this.unsubProjects = null
+    this.unsubSettings = null
   }
 
   /**
@@ -100,6 +129,94 @@ class DataService {
       this.notifyListeners()
       return this.projects
     }
+  }
+
+  /**
+   * Called when auth state changes (sign in / sign out)
+   */
+  async setUser(user) {
+    if (user) {
+      this.currentUser = user
+      this.firestoreEnabled = true
+      await this.startFirestoreSync()
+    } else {
+      this.currentUser = null
+      this.firestoreEnabled = false
+      // Unsubscribe from Firestore listeners
+      if (this.unsubProjects) {
+        this.unsubProjects()
+        this.unsubProjects = null
+      }
+      if (this.unsubSettings) {
+        this.unsubSettings()
+        this.unsubSettings = null
+      }
+      // Reload from localStorage cache
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        try {
+          this.projects = migrateProjectData(JSON.parse(stored))
+        } catch {
+          // keep current projects
+        }
+      }
+      this.notifyListeners()
+    }
+  }
+
+  /**
+   * Start real-time sync with Firestore
+   */
+  async startFirestoreSync() {
+    const uid = this.currentUser.uid
+    const projectsRef = collection(db, 'users', uid, 'projects')
+
+    // Check if user has any data in Firestore
+    const snapshot = await getDocs(projectsRef)
+    if (snapshot.empty && this.projects.length > 0) {
+      // First sign-in: migrate current localStorage data to Firestore
+      await this.migrateToFirestore()
+    }
+
+    // Start real-time listener for projects
+    this.unsubProjects = onSnapshot(projectsRef, (snap) => {
+      this.projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      this.saveToStorage() // cache locally
+      this.notifyListeners()
+    })
+
+    // Listen for project order
+    const settingsRef = doc(db, 'users', uid, 'meta', 'settings')
+    this.unsubSettings = onSnapshot(settingsRef, (snap) => {
+      if (snap.exists()) {
+        const order = snap.data().projectOrder
+        if (order) {
+          this.saveProjectOrder(order) // cache locally
+          this.notifyListeners()
+        }
+      }
+    })
+  }
+
+  /**
+   * Migrate current localStorage data to Firestore (first sign-in)
+   */
+  async migrateToFirestore() {
+    const uid = this.currentUser.uid
+    const batch = writeBatch(db)
+
+    this.projects.forEach((project) => {
+      const ref = doc(db, 'users', uid, 'projects', project.id)
+      batch.set(ref, sanitizeForFirestore(project))
+    })
+
+    const order = this.getProjectOrder()
+    if (order) {
+      const settingsRef = doc(db, 'users', uid, 'meta', 'settings')
+      batch.set(settingsRef, { projectOrder: order })
+    }
+
+    await batch.commit()
   }
 
   /**
@@ -152,6 +269,12 @@ class DataService {
       throw new Error('Order must be an array')
     }
     this.saveProjectOrder(newOrder)
+
+    if (this.firestoreEnabled && this.currentUser) {
+      const settingsRef = doc(db, 'users', this.currentUser.uid, 'meta', 'settings')
+      setDoc(settingsRef, { projectOrder: newOrder }, { merge: true })
+    }
+
     this.notifyListeners()
   }
 
@@ -160,17 +283,17 @@ class DataService {
    */
   getAllProjects(useCustomOrder = false) {
     const projects = [...this.projects]
-    
+
     if (useCustomOrder) {
       const order = this.getProjectOrder()
       if (order && order.length > 0) {
         // Create a map for quick lookup
         const projectMap = new Map(projects.map(p => [p.id, p]))
-        
+
         // Sort by custom order, then append any projects not in the order
         const ordered = []
         const unordered = []
-        
+
         order.forEach(id => {
           const project = projectMap.get(id)
           if (project) {
@@ -178,14 +301,14 @@ class DataService {
             projectMap.delete(id)
           }
         })
-        
+
         // Add any projects not in the custom order
         projectMap.forEach(project => unordered.push(project))
-        
+
         return [...ordered, ...unordered]
       }
     }
-    
+
     return projects
   }
 
@@ -218,17 +341,26 @@ class DataService {
       updatedAt: new Date().toISOString(),
     }
 
-    this.projects.push(newProject)
-    this.saveToStorage()
-    
-    // Add new project to the end of custom order if it exists
-    const order = this.getProjectOrder()
-    if (order) {
+    if (this.firestoreEnabled && this.currentUser) {
+      // Write to Firestore — onSnapshot will update this.projects
+      const ref = doc(db, 'users', this.currentUser.uid, 'projects', newProject.id)
+      setDoc(ref, sanitizeForFirestore(newProject))
+      // Also update order in Firestore
+      const order = this.getProjectOrder() || []
       order.push(newProject.id)
-      this.saveProjectOrder(order)
+      this.updateProjectOrder(order)
+    } else {
+      this.projects.push(newProject)
+      this.saveToStorage()
+      // Add new project to the end of custom order if it exists
+      const order = this.getProjectOrder()
+      if (order) {
+        order.push(newProject.id)
+        this.saveProjectOrder(order)
+      }
+      this.notifyListeners()
     }
-    
-    this.notifyListeners()
+
     return newProject
   }
 
@@ -256,9 +388,16 @@ class DataService {
       updatedAt: new Date().toISOString(),
     }
 
-    this.projects[index] = updated
-    this.saveToStorage()
-    this.notifyListeners()
+    if (this.firestoreEnabled && this.currentUser) {
+      // Write to Firestore — onSnapshot will update this.projects
+      const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
+      setDoc(ref, sanitizeForFirestore(updated))
+    } else {
+      this.projects[index] = updated
+      this.saveToStorage()
+      this.notifyListeners()
+    }
+
     return updated
   }
 
@@ -271,20 +410,36 @@ class DataService {
       throw new Error(`Project with id ${id} not found`)
     }
 
-    const deleted = this.projects.splice(index, 1)[0]
-    this.saveToStorage()
-    
-    // Remove from custom order if it exists
-    const order = this.getProjectOrder()
-    if (order) {
-      const orderIndex = order.indexOf(deleted.id)
-      if (orderIndex !== -1) {
-        order.splice(orderIndex, 1)
-        this.saveProjectOrder(order)
+    const deleted = this.projects[index]
+
+    if (this.firestoreEnabled && this.currentUser) {
+      // Delete from Firestore — onSnapshot will update this.projects
+      const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
+      deleteDoc(ref)
+      // Remove from order
+      const order = this.getProjectOrder()
+      if (order) {
+        const orderIndex = order.indexOf(id)
+        if (orderIndex !== -1) {
+          order.splice(orderIndex, 1)
+          this.updateProjectOrder(order)
+        }
       }
+    } else {
+      this.projects.splice(index, 1)
+      this.saveToStorage()
+      // Remove from custom order if it exists
+      const order = this.getProjectOrder()
+      if (order) {
+        const orderIndex = order.indexOf(deleted.id)
+        if (orderIndex !== -1) {
+          order.splice(orderIndex, 1)
+          this.saveProjectOrder(order)
+        }
+      }
+      this.notifyListeners()
     }
-    
-    this.notifyListeners()
+
     return deleted
   }
 
@@ -296,13 +451,36 @@ class DataService {
       throw new Error('Projects must be an array')
     }
 
-    this.projects = newProjects.map((p) => ({
+    const timestamped = newProjects.map((p) => ({
       ...p,
       updatedAt: new Date().toISOString(),
     }))
-    this.saveToStorage()
-    this.notifyListeners()
-    return this.projects
+
+    if (this.firestoreEnabled && this.currentUser) {
+      // Batch: delete all existing, then set all new
+      const uid = this.currentUser.uid
+      const batchOp = async () => {
+        // Delete existing
+        const existing = await getDocs(collection(db, 'users', uid, 'projects'))
+        const batch1 = writeBatch(db)
+        existing.docs.forEach((d) => batch1.delete(d.ref))
+        await batch1.commit()
+        // Add new
+        const batch2 = writeBatch(db)
+        timestamped.forEach((p) => {
+          const ref = doc(db, 'users', uid, 'projects', p.id)
+          batch2.set(ref, sanitizeForFirestore(p))
+        })
+        await batch2.commit()
+      }
+      batchOp()
+    } else {
+      this.projects = timestamped
+      this.saveToStorage()
+      this.notifyListeners()
+    }
+
+    return timestamped
   }
 
   /**

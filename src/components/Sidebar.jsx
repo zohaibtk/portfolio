@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import UserMenu from './UserMenu.jsx'
 
-export default function Sidebar({ projectCount }) {
+export default function Sidebar({ user }) {
   const [isOpen, setIsOpen] = useState(false)
   const location = useLocation()
 
@@ -129,7 +130,7 @@ export default function Sidebar({ projectCount }) {
           </NavLink>
         </nav>
         <div className="sidebar-footer">
-          <span className="sidebar-counter">{projectCount} projects</span>
+          <UserMenu user={user} />
         </div>
       </aside>
     </>
