@@ -9,9 +9,6 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 
-const STORAGE_KEY = 'pm-projects'
-const ORDER_STORAGE_KEY = 'pm-projects-order'
-
 /**
  * Sanitize an object for Firestore — replace undefined with null recursively
  */
@@ -74,11 +71,12 @@ function migrateProjectData(projects) {
 
 /**
  * Data service for managing projects
- * Supports localStorage (offline/default) and Firestore (when signed in)
+ * All data is stored in Firestore — no localStorage usage
  */
 class DataService {
   constructor() {
     this.projects = []
+    this.projectOrder = null
     this.listeners = []
     this.initialized = false
     // Firestore state
@@ -91,34 +89,12 @@ class DataService {
   }
 
   /**
-   * Initialize data - load from localStorage or fallback to JSON file
+   * Initialize data — start with empty list, Firestore loads on sign-in
    */
   async initialize() {
     if (this.initialized) return this.projects
-
-    try {
-      // First, try to load from localStorage
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          // Use localStorage data even if empty (user may have deleted all projects)
-          // Migrate old data structure to new releases array
-          this.projects = migrateProjectData(parsed)
-          this.initialized = true
-          this.saveToStorage() // Save migrated data
-          this.notifyListeners()
-          return this.projects
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load from localStorage:', error)
-    }
-
-    // No stored data — start with an empty project list
     this.projects = []
     this.initialized = true
-    this.saveToStorage()
     this.notifyListeners()
     return this.projects
   }
@@ -143,9 +119,9 @@ class DataService {
         this.unsubSettings()
         this.unsubSettings = null
       }
-      // Clear local data on sign-out — Firestore is the source of truth
+      // Clear in-memory data on sign-out
       this.projects = []
-      this.saveToStorage()
+      this.projectOrder = null
       this.notifyListeners()
     }
   }
@@ -160,15 +136,11 @@ class DataService {
     // Fetch current data from Firestore immediately
     const snapshot = await getDocs(projectsRef)
 
-    if (snapshot.empty && this.projects.length > 0) {
-      // First sign-in: migrate current localStorage data to Firestore
-      await this.migrateToFirestore()
-    } else {
-      // Load projects directly from Firestore (source of truth)
-      this.projects = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
-      this.saveToStorage() // cache locally
-      this.notifyListeners()
-    }
+    // Load projects directly from Firestore (source of truth)
+    this.projects = migrateProjectData(
+      snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    )
+    this.notifyListeners()
 
     // Load project order from Firestore
     const settingsRef = doc(db, 'users', uid, 'meta', 'settings')
@@ -178,7 +150,7 @@ class DataService {
       if (settingsDoc) {
         const order = settingsDoc.data().projectOrder
         if (order) {
-          this.saveProjectOrder(order)
+          this.projectOrder = order
           this.notifyListeners()
         }
       }
@@ -191,7 +163,6 @@ class DataService {
       // Skip snapshot if we have pending writes — our optimistic local state is newer
       if (this.pendingWrites > 0) return
       this.projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      this.saveToStorage() // cache locally
       this.notifyListeners()
     })
 
@@ -201,7 +172,7 @@ class DataService {
       if (snap.exists()) {
         const order = snap.data().projectOrder
         if (order) {
-          this.saveProjectOrder(order) // cache locally
+          this.projectOrder = order
           this.notifyListeners()
         }
       }
@@ -209,66 +180,10 @@ class DataService {
   }
 
   /**
-   * Migrate current localStorage data to Firestore (first sign-in)
-   */
-  async migrateToFirestore() {
-    const uid = this.currentUser.uid
-    const batch = writeBatch(db)
-
-    this.projects.forEach((project) => {
-      const ref = doc(db, 'users', uid, 'projects', project.id)
-      batch.set(ref, sanitizeForFirestore(project))
-    })
-
-    const order = this.getProjectOrder()
-    if (order) {
-      const settingsRef = doc(db, 'users', uid, 'meta', 'settings')
-      batch.set(settingsRef, { projectOrder: order })
-    }
-
-    await batch.commit()
-  }
-
-  /**
-   * Save projects to localStorage
-   */
-  saveToStorage() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.projects))
-    } catch (error) {
-      console.error('Failed to save to localStorage:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Get custom project order from localStorage
+   * Get custom project order (in-memory)
    */
   getProjectOrder() {
-    try {
-      const stored = localStorage.getItem(ORDER_STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          return parsed
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load project order:', error)
-    }
-    return null
-  }
-
-  /**
-   * Save custom project order to localStorage
-   */
-  saveProjectOrder(order) {
-    try {
-      localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(order))
-    } catch (error) {
-      console.error('Failed to save project order:', error)
-      throw error
-    }
+    return this.projectOrder
   }
 
   /**
@@ -278,7 +193,7 @@ class DataService {
     if (!Array.isArray(newOrder)) {
       throw new Error('Order must be an array')
     }
-    this.saveProjectOrder(newOrder)
+    this.projectOrder = newOrder
 
     if (this.firestoreEnabled && this.currentUser) {
       const settingsRef = doc(db, 'users', this.currentUser.uid, 'meta', 'settings')
@@ -369,13 +284,12 @@ class DataService {
       }
     }
 
-    // Update local state after successful Firestore write
+    // Update in-memory state after successful Firestore write
     this.projects.push(newProject)
-    this.saveToStorage()
     const order = this.getProjectOrder() || []
     if (!order.includes(newProject.id)) {
       order.push(newProject.id)
-      this.saveProjectOrder(order)
+      this.projectOrder = order
     }
     this.notifyListeners()
 
@@ -420,9 +334,8 @@ class DataService {
       }
     }
 
-    // Update local state after successful Firestore write
+    // Update in-memory state after successful Firestore write
     this.projects[index] = updated
-    this.saveToStorage()
     this.notifyListeners()
 
     return updated
@@ -461,17 +374,16 @@ class DataService {
       }
     }
 
-    // Update local state after successful Firestore delete
+    // Update in-memory state after successful Firestore delete
     this.projects.splice(index, 1)
-    this.saveToStorage()
 
-    // Remove from custom order locally
+    // Remove from in-memory order
     const order = this.getProjectOrder()
     if (order) {
       const orderIndex = order.indexOf(deleted.id)
       if (orderIndex !== -1) {
         order.splice(orderIndex, 1)
-        this.saveProjectOrder(order)
+        this.projectOrder = order
       }
     }
 
@@ -518,9 +430,8 @@ class DataService {
       }
     }
 
-    // Update local state after successful Firestore write
+    // Update in-memory state after successful Firestore write
     this.projects = timestamped
-    this.saveToStorage()
     this.notifyListeners()
 
     return timestamped

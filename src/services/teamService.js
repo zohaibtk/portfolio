@@ -9,8 +9,6 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 
-const STORAGE_KEY = 'pm-team-members'
-
 /**
  * Sanitize an object for Firestore — replace undefined with null recursively
  */
@@ -27,7 +25,7 @@ function sanitizeForFirestore(obj) {
 
 /**
  * Team members service for managing global team members list
- * Supports localStorage (offline/default) and Firestore (when signed in)
+ * All data is stored in Firestore — no localStorage usage
  */
 class TeamService {
   constructor() {
@@ -38,34 +36,17 @@ class TeamService {
     this.currentUser = null
     this.firestoreEnabled = false
     this.unsubTeamMembers = null
+    // Track pending Firestore writes to avoid onSnapshot overwriting optimistic updates
+    this.pendingWrites = 0
   }
 
   /**
-   * Initialize data - load from localStorage
+   * Initialize data — start with empty list, Firestore loads on sign-in
    */
   async initialize() {
     if (this.initialized) return this.teamMembers
-
-    try {
-      // Try to load from localStorage
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          this.teamMembers = parsed
-          this.initialized = true
-          this.notifyListeners()
-          return this.teamMembers
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load team members from localStorage:', error)
-    }
-
-    // Initialize with empty array
     this.teamMembers = []
     this.initialized = true
-    this.saveToStorage()
     this.notifyListeners()
     return this.teamMembers
   }
@@ -86,15 +67,8 @@ class TeamService {
         this.unsubTeamMembers()
         this.unsubTeamMembers = null
       }
-      // Reload from localStorage cache
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        try {
-          this.teamMembers = JSON.parse(stored)
-        } catch {
-          // keep current team members
-        }
-      }
+      // Clear in-memory data on sign-out
+      this.teamMembers = []
       this.notifyListeners()
     }
   }
@@ -106,46 +80,20 @@ class TeamService {
     const uid = this.currentUser.uid
     const teamMembersRef = collection(db, 'users', uid, 'teamMembers')
 
-    // Check if user has any data in Firestore
+    // Fetch current data from Firestore immediately
     const snapshot = await getDocs(teamMembersRef)
-    if (snapshot.empty && this.teamMembers.length > 0) {
-      // First sign-in: migrate current localStorage data to Firestore
-      await this.migrateToFirestore()
-    }
 
-    // Start real-time listener for team members
+    // Load team members directly from Firestore (source of truth)
+    this.teamMembers = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    this.notifyListeners()
+
+    // Start real-time listener for ongoing changes
     this.unsubTeamMembers = onSnapshot(teamMembersRef, (snap) => {
+      // Skip snapshot if we have pending writes — our optimistic local state is newer
+      if (this.pendingWrites > 0) return
       this.teamMembers = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      this.saveToStorage() // cache locally
       this.notifyListeners()
     })
-  }
-
-  /**
-   * Migrate current localStorage data to Firestore (first sign-in)
-   */
-  async migrateToFirestore() {
-    const uid = this.currentUser.uid
-    const batch = writeBatch(db)
-
-    this.teamMembers.forEach((member) => {
-      const ref = doc(db, 'users', uid, 'teamMembers', member.id)
-      batch.set(ref, sanitizeForFirestore(member))
-    })
-
-    await batch.commit()
-  }
-
-  /**
-   * Save team members to localStorage
-   */
-  saveToStorage() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.teamMembers))
-    } catch (error) {
-      console.error('Failed to save team members to localStorage:', error)
-      throw error
-    }
   }
 
   /**
@@ -180,18 +128,23 @@ class TeamService {
       updatedAt: new Date().toISOString(),
     }
 
-    // Update local state immediately for instant UI feedback
-    this.teamMembers.push(newMember)
-    this.saveToStorage()
-    this.notifyListeners()
-
-    // If Firestore is enabled, sync in the background (don't await)
     if (this.firestoreEnabled && this.currentUser) {
-      const ref = doc(db, 'users', this.currentUser.uid, 'teamMembers', newMember.id)
-      setDoc(ref, sanitizeForFirestore(newMember)).catch((error) => {
-        console.error('Failed to sync to Firestore:', error)
-      })
+      // Save to Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const ref = doc(db, 'users', this.currentUser.uid, 'teamMembers', newMember.id)
+        await setDoc(ref, sanitizeForFirestore(newMember))
+      } catch (error) {
+        console.error('Failed to save to Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
+      }
     }
+
+    // Update in-memory state after successful Firestore write
+    this.teamMembers.push(newMember)
+    this.notifyListeners()
 
     return newMember
   }
@@ -220,18 +173,23 @@ class TeamService {
       updatedAt: new Date().toISOString(),
     }
 
-    // Update local state immediately for instant UI feedback
-    this.teamMembers[index] = updated
-    this.saveToStorage()
-    this.notifyListeners()
-
-    // If Firestore is enabled, sync in the background (don't await)
     if (this.firestoreEnabled && this.currentUser) {
-      const ref = doc(db, 'users', this.currentUser.uid, 'teamMembers', id)
-      setDoc(ref, sanitizeForFirestore(updated)).catch((error) => {
-        console.error('Failed to sync to Firestore:', error)
-      })
+      // Save to Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const ref = doc(db, 'users', this.currentUser.uid, 'teamMembers', id)
+        await setDoc(ref, sanitizeForFirestore(updated))
+      } catch (error) {
+        console.error('Failed to save to Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
+      }
     }
+
+    // Update in-memory state after successful Firestore write
+    this.teamMembers[index] = updated
+    this.notifyListeners()
 
     return updated
   }
@@ -239,7 +197,7 @@ class TeamService {
   /**
    * Delete a team member
    */
-  deleteTeamMember(id) {
+  async deleteTeamMember(id) {
     const index = this.teamMembers.findIndex((m) => m.id === id)
     if (index === -1) {
       throw new Error(`Team member with id ${id} not found`)
@@ -247,18 +205,23 @@ class TeamService {
 
     const deleted = this.teamMembers[index]
 
-    // Update local state immediately for instant UI feedback
-    this.teamMembers.splice(index, 1)
-    this.saveToStorage()
-    this.notifyListeners()
-
-    // If Firestore is enabled, sync in the background (don't await)
     if (this.firestoreEnabled && this.currentUser) {
-      const ref = doc(db, 'users', this.currentUser.uid, 'teamMembers', id)
-      deleteDoc(ref).catch((error) => {
-        console.error('Failed to sync deletion to Firestore:', error)
-      })
+      // Delete from Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const ref = doc(db, 'users', this.currentUser.uid, 'teamMembers', id)
+        await deleteDoc(ref)
+      } catch (error) {
+        console.error('Failed to delete from Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
+      }
     }
+
+    // Update in-memory state after successful Firestore delete
+    this.teamMembers.splice(index, 1)
+    this.notifyListeners()
 
     return deleted
   }
@@ -266,7 +229,7 @@ class TeamService {
   /**
    * Replace all team members (useful for import)
    */
-  replaceAllTeamMembers(newMembers) {
+  async replaceAllTeamMembers(newMembers) {
     if (!Array.isArray(newMembers)) {
       throw new Error('Team members must be an array')
     }
@@ -277,9 +240,10 @@ class TeamService {
     }))
 
     if (this.firestoreEnabled && this.currentUser) {
-      // Batch: delete all existing, then set all new
-      const uid = this.currentUser.uid
-      const batchOp = async () => {
+      // Save to Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const uid = this.currentUser.uid
         // Delete existing
         const existing = await getDocs(collection(db, 'users', uid, 'teamMembers'))
         const batch1 = writeBatch(db)
@@ -292,13 +256,17 @@ class TeamService {
           batch2.set(ref, sanitizeForFirestore(m))
         })
         await batch2.commit()
+      } catch (error) {
+        console.error('Failed to replace team members in Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
       }
-      batchOp()
-    } else {
-      this.teamMembers = timestamped
-      this.saveToStorage()
-      this.notifyListeners()
     }
+
+    // Update in-memory state after successful Firestore write
+    this.teamMembers = timestamped
+    this.notifyListeners()
 
     return timestamped
   }

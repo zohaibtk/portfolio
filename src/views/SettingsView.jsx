@@ -62,10 +62,8 @@ export default function SettingsView() {
       <div className="settings-card">
         <h2 className="settings-title">Portfolio data (JSON)</h2>
         <p className="settings-text">
-          <strong>Data persistence:</strong> All changes are automatically saved to your
-          browser's local storage and persist across page refreshes. The app loads from
-          localStorage first, then falls back to the bundled <code>projects.json</code>{' '}
-          file if no saved data exists.
+          <strong>Data persistence:</strong> All data is stored in Firestore and synced
+          in real-time. Sign in with Google to access your projects from any device.
         </p>
         <p className="settings-text" style={{ marginTop: '0.75rem' }}>
           <strong>Export/Import:</strong> Use export to download your current portfolio
