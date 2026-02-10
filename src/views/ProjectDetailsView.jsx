@@ -264,6 +264,7 @@ export default function ProjectDetailsView({ projects, onEdit, onDelete, onMom }
                   <span className="details-team-name">{m.name}</span>
                   {m.role && <span className="details-team-role">{m.role}</span>}
                 </div>
+                <span className="allocation-badge">{m.allocation ?? 100}%</span>
               </div>
             ))}
           </div>

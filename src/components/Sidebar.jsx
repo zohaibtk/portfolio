@@ -119,6 +119,16 @@ export default function Sidebar({ user }) {
             Project list
           </NavLink>
 
+          <div className="sidebar-section-label">Team</div>
+          <NavLink
+            to="/team-allocation"
+            className={({ isActive }) =>
+              `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
+            }
+          >
+            Team allocation
+          </NavLink>
+
           <div className="sidebar-section-label">Admin</div>
           <NavLink
             to="/settings"

@@ -193,16 +193,25 @@ export default function ProjectCard({ project, onEdit, onDelete, onMom, dragHand
           <div className="project-card__meta-right">
             {project.teamMembers?.length > 0 && (
               <div className="project-card__avatars-compact">
-                {project.teamMembers.slice(0, 2).map((m) => (
+                {project.teamMembers.slice(0, project.teamMembers.length-1).map((m) => (
                   <div
                     key={m.id}
                     className="avatar avatar-sm"
                     style={{ background: getAvatarColor(m.name) }}
-                    title={`${m.name}${m.role ? ` — ${m.role}` : ''}`}
+                    title={`${m.name}${m.role ? ` — ${m.role}` : ''}${m.allocation != null ? ` (${m.allocation}%)` : ''}`}
                   >
                     {getInitials(m.name)}
                   </div>
                 ))}
+                {project.teamMembers.length > 5 && (
+                  <div
+                    className="avatar avatar-sm"
+                    style={{ background: '#94a3b8', fontSize: '0.65rem' }}
+                    title={`${project.teamMembers.slice(5).map(m => m.name).join(', ')}`}
+                  >
+                    +{project.teamMembers.length - 5}
+                  </div>
+                )}
               </div>
             )}
           </div>

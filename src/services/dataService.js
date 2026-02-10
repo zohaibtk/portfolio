@@ -322,7 +322,7 @@ class DataService {
   /**
    * Create a new project
    */
-  createProject(projectData) {
+  async createProject(projectData) {
     if (!projectData.name || !projectData.name.trim()) {
       throw new Error('Project name is required')
     }
@@ -337,28 +337,32 @@ class DataService {
       notes: projectData.notes?.trim() || '',
       discovery: projectData.discovery || {},
       development: projectData.development || {},
+      teamMembers: projectData.teamMembers || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
 
+    // Update local state immediately for instant UI feedback
+    this.projects.push(newProject)
+    this.saveToStorage()
+    const order = this.getProjectOrder() || []
+    order.push(newProject.id)
+    this.saveProjectOrder(order)
+    this.notifyListeners()
+
+    // If Firestore is enabled, sync in the background (don't await)
     if (this.firestoreEnabled && this.currentUser) {
-      // Write to Firestore — onSnapshot will update this.projects
       const ref = doc(db, 'users', this.currentUser.uid, 'projects', newProject.id)
       setDoc(ref, sanitizeForFirestore(newProject))
-      // Also update order in Firestore
-      const order = this.getProjectOrder() || []
-      order.push(newProject.id)
-      this.updateProjectOrder(order)
-    } else {
-      this.projects.push(newProject)
-      this.saveToStorage()
-      // Add new project to the end of custom order if it exists
-      const order = this.getProjectOrder()
-      if (order) {
-        order.push(newProject.id)
-        this.saveProjectOrder(order)
-      }
-      this.notifyListeners()
+        .then(() => {
+          // Also update order in Firestore
+          this.updateProjectOrder(order)
+        })
+        .catch((error) => {
+          console.error('Failed to sync to Firestore:', error)
+          // The local state is already updated, so user sees their changes
+          // Firestore will eventually sync when connection is restored
+        })
     }
 
     return newProject
@@ -367,7 +371,7 @@ class DataService {
   /**
    * Update an existing project
    */
-  updateProject(id, projectData) {
+  async updateProject(id, projectData) {
     const index = this.projects.findIndex((p) => p.id === id)
     if (index === -1) {
       throw new Error(`Project with id ${id} not found`)
@@ -388,14 +392,19 @@ class DataService {
       updatedAt: new Date().toISOString(),
     }
 
+    // Update local state immediately for instant UI feedback
+    this.projects[index] = updated
+    this.saveToStorage()
+    this.notifyListeners()
+
+    // If Firestore is enabled, sync in the background (don't await)
     if (this.firestoreEnabled && this.currentUser) {
-      // Write to Firestore — onSnapshot will update this.projects
       const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
-      setDoc(ref, sanitizeForFirestore(updated))
-    } else {
-      this.projects[index] = updated
-      this.saveToStorage()
-      this.notifyListeners()
+      setDoc(ref, sanitizeForFirestore(updated)).catch((error) => {
+        console.error('Failed to sync to Firestore:', error)
+        // The local state is already updated, so user sees their changes
+        // Firestore will eventually sync when connection is restored
+      })
     }
 
     return updated
@@ -412,32 +421,38 @@ class DataService {
 
     const deleted = this.projects[index]
 
+    // Update local state immediately for instant UI feedback
+    this.projects.splice(index, 1)
+    this.saveToStorage()
+
+    // Remove from custom order if it exists
+    const order = this.getProjectOrder()
+    if (order) {
+      const orderIndex = order.indexOf(deleted.id)
+      if (orderIndex !== -1) {
+        order.splice(orderIndex, 1)
+        this.saveProjectOrder(order)
+      }
+    }
+
+    this.notifyListeners()
+
+    // If Firestore is enabled, sync in the background (don't await)
     if (this.firestoreEnabled && this.currentUser) {
-      // Delete from Firestore — onSnapshot will update this.projects
       const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
       deleteDoc(ref)
-      // Remove from order
-      const order = this.getProjectOrder()
-      if (order) {
-        const orderIndex = order.indexOf(id)
-        if (orderIndex !== -1) {
-          order.splice(orderIndex, 1)
-          this.updateProjectOrder(order)
-        }
-      }
-    } else {
-      this.projects.splice(index, 1)
-      this.saveToStorage()
-      // Remove from custom order if it exists
-      const order = this.getProjectOrder()
-      if (order) {
-        const orderIndex = order.indexOf(deleted.id)
-        if (orderIndex !== -1) {
-          order.splice(orderIndex, 1)
-          this.saveProjectOrder(order)
-        }
-      }
-      this.notifyListeners()
+        .then(() => {
+          // Also update order in Firestore
+          const currentOrder = this.getProjectOrder()
+          if (currentOrder) {
+            this.updateProjectOrder(currentOrder)
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to sync deletion to Firestore:', error)
+          // The local state is already updated, so user sees their changes
+          // Firestore will eventually sync when connection is restored
+        })
     }
 
     return deleted

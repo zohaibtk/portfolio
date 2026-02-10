@@ -24,6 +24,7 @@ import TimelineView from './views/TimelineView.jsx'
 import ProjectListView from './views/ProjectListView.jsx'
 import ProjectDetailsView from './views/ProjectDetailsView.jsx'
 import SettingsView from './views/SettingsView.jsx'
+import TeamAllocationView from './views/TeamAllocationView.jsx'
 
 function App() {
   const [projects, setProjects] = useState([])
@@ -218,14 +219,14 @@ function App() {
     }
   }
 
-  function handleSave(projectInput) {
+  async function handleSave(projectInput) {
     try {
       if (projectInput.id) {
         // Update existing project
-        dataService.updateProject(projectInput.id, projectInput)
+        await dataService.updateProject(projectInput.id, projectInput)
       } else {
         // Create new project
-        dataService.createProject(projectInput)
+        await dataService.createProject(projectInput)
       }
       setEditorOpen(false)
       setEditingProject(null)
@@ -240,10 +241,10 @@ function App() {
     setMomOpen(true)
   }
 
-  function handleSaveMom(projectId, meetingMinutes) {
+  async function handleSaveMom(projectId, meetingMinutes) {
     const project = projects.find((p) => p.id === projectId)
     if (project) {
-      dataService.updateProject(projectId, { ...project, meetingMinutes })
+      await dataService.updateProject(projectId, { ...project, meetingMinutes })
     }
     setMomOpen(false)
   }
@@ -387,6 +388,10 @@ function App() {
                 <Route
                   path="/timeline"
                   element={<TimelineView projects={projectsWithDerived} />}
+                />
+                <Route
+                  path="/team-allocation"
+                  element={<TeamAllocationView projects={projectsWithDerived} />}
                 />
                 <Route
                   path="/projects"

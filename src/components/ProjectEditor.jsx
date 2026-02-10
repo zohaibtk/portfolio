@@ -134,6 +134,7 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
           id: `tm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: '',
           role: '',
+          allocation: 100,
         },
       ],
     }))
@@ -202,7 +203,7 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
     return errors
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setSubmitAttempted(true)
 
@@ -261,9 +262,10 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
           ...m,
           name: m.name.trim(),
           role: m.role?.trim() || '',
+          allocation: m.allocation ?? 100,
         })),
     }
-    onSave(result)
+    await onSave(result)
   }
 
   return (
@@ -629,6 +631,19 @@ export default function ProjectEditor({ open, initialProject, onSave, onCancel, 
                           onChange={(e) => handleTeamMemberChange(index, 'role', e.target.value)}
                           placeholder="e.g. Developer, Designer, PM"
                         />
+                      </label>
+                      <label className="team-member-editor-label team-member-editor-label--allocation">
+                        <span>Allocation</span>
+                        <div className="allocation-input-wrapper">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={m.allocation ?? 100}
+                            onChange={(e) => handleTeamMemberChange(index, 'allocation', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                          />
+                          <span className="allocation-suffix">%</span>
+                        </div>
                       </label>
                     </div>
                     <button
