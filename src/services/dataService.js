@@ -1,4 +1,3 @@
-import projectsData from '../data/projects.json'
 import { db } from './firebase'
 import {
   collection,
@@ -87,6 +86,8 @@ class DataService {
     this.firestoreEnabled = false
     this.unsubProjects = null
     this.unsubSettings = null
+    // Track pending Firestore writes to avoid onSnapshot overwriting optimistic updates
+    this.pendingWrites = 0
   }
 
   /**
@@ -114,21 +115,12 @@ class DataService {
       console.warn('Failed to load from localStorage:', error)
     }
 
-    // Fallback to bundled JSON file
-    try {
-      const data = Array.isArray(projectsData) ? [...projectsData] : []
-      this.projects = migrateProjectData(data)
-      this.initialized = true
-      this.saveToStorage()
-      this.notifyListeners()
-      return this.projects
-    } catch (error) {
-      console.error('Failed to load initial data:', error)
-      this.projects = []
-      this.initialized = true
-      this.notifyListeners()
-      return this.projects
-    }
+    // No stored data — start with an empty project list
+    this.projects = []
+    this.initialized = true
+    this.saveToStorage()
+    this.notifyListeners()
+    return this.projects
   }
 
   /**
@@ -151,15 +143,9 @@ class DataService {
         this.unsubSettings()
         this.unsubSettings = null
       }
-      // Reload from localStorage cache
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        try {
-          this.projects = migrateProjectData(JSON.parse(stored))
-        } catch {
-          // keep current projects
-        }
-      }
+      // Clear local data on sign-out — Firestore is the source of truth
+      this.projects = []
+      this.saveToStorage()
       this.notifyListeners()
     }
   }
@@ -171,23 +157,47 @@ class DataService {
     const uid = this.currentUser.uid
     const projectsRef = collection(db, 'users', uid, 'projects')
 
-    // Check if user has any data in Firestore
+    // Fetch current data from Firestore immediately
     const snapshot = await getDocs(projectsRef)
+
     if (snapshot.empty && this.projects.length > 0) {
       // First sign-in: migrate current localStorage data to Firestore
       await this.migrateToFirestore()
+    } else {
+      // Load projects directly from Firestore (source of truth)
+      this.projects = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+      this.saveToStorage() // cache locally
+      this.notifyListeners()
     }
 
-    // Start real-time listener for projects
+    // Load project order from Firestore
+    const settingsRef = doc(db, 'users', uid, 'meta', 'settings')
+    try {
+      const settingsSnap = await getDocs(collection(db, 'users', uid, 'meta'))
+      const settingsDoc = settingsSnap.docs.find((d) => d.id === 'settings')
+      if (settingsDoc) {
+        const order = settingsDoc.data().projectOrder
+        if (order) {
+          this.saveProjectOrder(order)
+          this.notifyListeners()
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load project order from Firestore:', error)
+    }
+
+    // Start real-time listener for ongoing changes
     this.unsubProjects = onSnapshot(projectsRef, (snap) => {
+      // Skip snapshot if we have pending writes — our optimistic local state is newer
+      if (this.pendingWrites > 0) return
       this.projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       this.saveToStorage() // cache locally
       this.notifyListeners()
     })
 
-    // Listen for project order
-    const settingsRef = doc(db, 'users', uid, 'meta', 'settings')
+    // Listen for project order changes
     this.unsubSettings = onSnapshot(settingsRef, (snap) => {
+      if (this.pendingWrites > 0) return
       if (snap.exists()) {
         const order = snap.data().projectOrder
         if (order) {
@@ -264,7 +274,7 @@ class DataService {
   /**
    * Update project order
    */
-  updateProjectOrder(newOrder) {
+  async updateProjectOrder(newOrder) {
     if (!Array.isArray(newOrder)) {
       throw new Error('Order must be an array')
     }
@@ -272,7 +282,7 @@ class DataService {
 
     if (this.firestoreEnabled && this.currentUser) {
       const settingsRef = doc(db, 'users', this.currentUser.uid, 'meta', 'settings')
-      setDoc(settingsRef, { projectOrder: newOrder }, { merge: true })
+      await setDoc(settingsRef, { projectOrder: newOrder }, { merge: true })
     }
 
     this.notifyListeners()
@@ -342,28 +352,32 @@ class DataService {
       updatedAt: new Date().toISOString(),
     }
 
-    // Update local state immediately for instant UI feedback
+    if (this.firestoreEnabled && this.currentUser) {
+      // Save to Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const ref = doc(db, 'users', this.currentUser.uid, 'projects', newProject.id)
+        await setDoc(ref, sanitizeForFirestore(newProject))
+        const order = this.getProjectOrder() || []
+        order.push(newProject.id)
+        await this.updateProjectOrder(order)
+      } catch (error) {
+        console.error('Failed to save to Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
+      }
+    }
+
+    // Update local state after successful Firestore write
     this.projects.push(newProject)
     this.saveToStorage()
     const order = this.getProjectOrder() || []
-    order.push(newProject.id)
-    this.saveProjectOrder(order)
-    this.notifyListeners()
-
-    // If Firestore is enabled, sync in the background (don't await)
-    if (this.firestoreEnabled && this.currentUser) {
-      const ref = doc(db, 'users', this.currentUser.uid, 'projects', newProject.id)
-      setDoc(ref, sanitizeForFirestore(newProject))
-        .then(() => {
-          // Also update order in Firestore
-          this.updateProjectOrder(order)
-        })
-        .catch((error) => {
-          console.error('Failed to sync to Firestore:', error)
-          // The local state is already updated, so user sees their changes
-          // Firestore will eventually sync when connection is restored
-        })
+    if (!order.includes(newProject.id)) {
+      order.push(newProject.id)
+      this.saveProjectOrder(order)
     }
+    this.notifyListeners()
 
     return newProject
   }
@@ -392,20 +406,24 @@ class DataService {
       updatedAt: new Date().toISOString(),
     }
 
-    // Update local state immediately for instant UI feedback
+    if (this.firestoreEnabled && this.currentUser) {
+      // Save to Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
+        await setDoc(ref, sanitizeForFirestore(updated))
+      } catch (error) {
+        console.error('Failed to save to Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
+      }
+    }
+
+    // Update local state after successful Firestore write
     this.projects[index] = updated
     this.saveToStorage()
     this.notifyListeners()
-
-    // If Firestore is enabled, sync in the background (don't await)
-    if (this.firestoreEnabled && this.currentUser) {
-      const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
-      setDoc(ref, sanitizeForFirestore(updated)).catch((error) => {
-        console.error('Failed to sync to Firestore:', error)
-        // The local state is already updated, so user sees their changes
-        // Firestore will eventually sync when connection is restored
-      })
-    }
 
     return updated
   }
@@ -413,7 +431,7 @@ class DataService {
   /**
    * Delete a project
    */
-  deleteProject(id) {
+  async deleteProject(id) {
     const index = this.projects.findIndex((p) => p.id === id)
     if (index === -1) {
       throw new Error(`Project with id ${id} not found`)
@@ -421,11 +439,33 @@ class DataService {
 
     const deleted = this.projects[index]
 
-    // Update local state immediately for instant UI feedback
+    if (this.firestoreEnabled && this.currentUser) {
+      // Delete from Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
+        await deleteDoc(ref)
+        const order = this.getProjectOrder()
+        if (order) {
+          const orderIndex = order.indexOf(deleted.id)
+          if (orderIndex !== -1) {
+            order.splice(orderIndex, 1)
+            await this.updateProjectOrder(order)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to delete from Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
+      }
+    }
+
+    // Update local state after successful Firestore delete
     this.projects.splice(index, 1)
     this.saveToStorage()
 
-    // Remove from custom order if it exists
+    // Remove from custom order locally
     const order = this.getProjectOrder()
     if (order) {
       const orderIndex = order.indexOf(deleted.id)
@@ -437,31 +477,13 @@ class DataService {
 
     this.notifyListeners()
 
-    // If Firestore is enabled, sync in the background (don't await)
-    if (this.firestoreEnabled && this.currentUser) {
-      const ref = doc(db, 'users', this.currentUser.uid, 'projects', id)
-      deleteDoc(ref)
-        .then(() => {
-          // Also update order in Firestore
-          const currentOrder = this.getProjectOrder()
-          if (currentOrder) {
-            this.updateProjectOrder(currentOrder)
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to sync deletion to Firestore:', error)
-          // The local state is already updated, so user sees their changes
-          // Firestore will eventually sync when connection is restored
-        })
-    }
-
     return deleted
   }
 
   /**
    * Replace all projects (useful for import)
    */
-  replaceAllProjects(newProjects) {
+  async replaceAllProjects(newProjects) {
     if (!Array.isArray(newProjects)) {
       throw new Error('Projects must be an array')
     }
@@ -472,9 +494,10 @@ class DataService {
     }))
 
     if (this.firestoreEnabled && this.currentUser) {
-      // Batch: delete all existing, then set all new
-      const uid = this.currentUser.uid
-      const batchOp = async () => {
+      // Save to Firestore first (source of truth)
+      this.pendingWrites++
+      try {
+        const uid = this.currentUser.uid
         // Delete existing
         const existing = await getDocs(collection(db, 'users', uid, 'projects'))
         const batch1 = writeBatch(db)
@@ -487,13 +510,18 @@ class DataService {
           batch2.set(ref, sanitizeForFirestore(p))
         })
         await batch2.commit()
+      } catch (error) {
+        console.error('Failed to replace projects in Firestore:', error)
+        throw error
+      } finally {
+        this.pendingWrites--
       }
-      batchOp()
-    } else {
-      this.projects = timestamped
-      this.saveToStorage()
-      this.notifyListeners()
     }
+
+    // Update local state after successful Firestore write
+    this.projects = timestamped
+    this.saveToStorage()
+    this.notifyListeners()
 
     return timestamped
   }
