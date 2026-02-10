@@ -43,13 +43,11 @@ export default function Sidebar({ projectCount }) {
       </button>
 
       {/* Backdrop overlay for mobile */}
-      {isOpen && (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setIsOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+      <div
+        className={`sidebar-backdrop ${isOpen ? 'sidebar-backdrop-visible' : ''}`}
+        onClick={() => setIsOpen(false)}
+        aria-hidden="true"
+      />
 
       <aside className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-brand">
